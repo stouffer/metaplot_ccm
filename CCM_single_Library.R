@@ -1,10 +1,11 @@
 setwd("~/Dropbox/Active Work/Sugihara/Metacommunity_CCM/")
 
 ################################################################
-# Generate time series function
+# Initialize the C functions for CCM
 ################################################################
+program_init()
 
-make_comp_data<-function() {
+program_init<-function() {
   #########################
   # Load CCM function
   #########################
@@ -14,23 +15,48 @@ make_comp_data<-function() {
     system("rm *.so"); system("rm *.o")
   }
   system(paste("R CMD SHLIB ",file,".c",sep=""))
-  dyn.load(paste(file,".so",sep=""))
-  
-  CCM_varL<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), plengtht=length(A), pLibLength=length(A), Aest=rep(0, length(A)), rho=rep(0,length(A))) {
-    if(plengtht>pLibLength) {plengtht=pLibLength}
-    DesiredL<-DesiredL+E-2
-    out<-.C("CCM_varL_130409", A=as.double(A), Aest=as.double(Aest), B=as.double(B), rho=as.double(rho), E=as.integer(E), tau=as.integer(tau),
-            plength=as.integer(plengtht), pLibLength=as.integer(pLibLength),DesiredL=as.integer(DesiredL), plengthDesL=as.integer(length(DesiredL)))
-    out$Aest[out$Aest==0]<-NA #Mark values that were not calculated  
-    return(list(A=out$A, Aest=out$Aest, B=out$B, rho=out$rho[out$rho!=0], Lobs=(1:length(A))[out$rho!=0]-E+1, E=out$E, tau=out$tau, FULLinfo=out))
-  }
+  dyn.load(paste(file,".so",sep=""))  
+}
+
+CCM_varL<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), plengtht=length(A), pLibLength=length(A), Aest=rep(0, length(A)), rho=rep(0,length(A))) {
+  if(plengtht>pLibLength) {plengtht=pLibLength}
+  DesiredL<-DesiredL+E-2
+  out<-.C("CCM_varL_130409", A=as.double(A), Aest=as.double(Aest), B=as.double(B), rho=as.double(rho), E=as.integer(E), tau=as.integer(tau),
+          plength=as.integer(plengtht), pLibLength=as.integer(pLibLength),DesiredL=as.integer(DesiredL), plengthDesL=as.integer(length(DesiredL)))
+  out$Aest[out$Aest==0]<-NA #Mark values that were not calculated  
+  return(list(A=out$A, Aest=out$Aest, B=out$B, rho=out$rho[out$rho!=0], Lobs=(1:length(A))[out$rho!=0]-E+1, E=out$E, tau=out$tau, FULLinfo=out))
+}
+
+################################################################
+# Generate time series function
+################################################################
+ode_result<-make_comp_data(seednum=2000)
+
+make_comp_data<-function(nspec=12,
+                         pars=list(a = 1,
+                                       w = 1,
+                                       K = 10,
+                                       m = 0.1,
+                                       Q = 2,
+                                       r = 1,
+                                       S = 100,
+                                       xrange = c(20, 30),
+                                       yrange = c(0, 10),
+                                       xstr=0),
+                         B=c(rep(0.01, nspec)),
+                         R=100,
+                         times=seq(1, 200, by = 1),
+                         OUrates=c(0.1, 0.1), #strength of return to mean
+                         Wrates=c(1, 1), #strength of deviation from mean
+                         seednum=1989
+                         ) {
   
   #########################
   # Load diffeq function
   #########################
   
   require(deSolve) # load differentail equation solver package
-  set.seed(1989)
+  set.seed(seednum)
   
   Bmod <- function(Time, State, Pars) {
     with(as.list(c(State, Pars)), {
@@ -47,32 +73,8 @@ make_comp_data<-function() {
   }
   
   #########################
-  # set parameter values
-  #########################
-  
-  nspec<-12
-  pars  <- list(a = 1,
-                w = 1,
-                K = 10,
-                m = 0.1,
-                Q = 2,
-                r = 1,
-                S = 100,
-                xrange = c(20, 30),
-                yrange = c(0, 10))
-  
-  
-  B <- c(rep(0.01, nspec))
-  R <- 100
-  yini<-c(R, B)
-  
-  #########################
   # make climate variables
   #########################
-  times <- seq(1, 200, by = 1)
-  OUrates<-c(0.1, 0.1) #strength of return to mean
-  Wrates<-c(1, 1) #strength of deviation from mean
-  
   xlist<- numeric(length(times))
   ylist<- numeric(length(times))
   
@@ -89,8 +91,6 @@ make_comp_data<-function() {
   
   } #Check out speed of response (Smapping - which work, which don't? Fully stochastic vs. some signal)
   
-  #matplot(times, cbind(xlist, ylist), type="l")
-  
   #########################
   # run diffeq function
   #########################
@@ -99,15 +99,28 @@ make_comp_data<-function() {
   pars$xlist<-xlist
   pars$ylist<-ylist
   
-  pars$xstr<-0
-  
   pars$xopt<-runif(nspec, min=pars$xrange[1], max=pars$xrange[2])
   pars$yopt<-runif(nspec, min=pars$yrange[1], max=pars$yrange[2])
+  yini<-c(R, B)
+  
   
   out   <- ode(yini, times, Bmod, pars)
+  
+  return(list(out=out, pars=pars))
+}
+
+
+################################################################
+# Make plots of results
+################################################################
+plot_output(ode_result)
+
+plot_output<-function(ode_result) {
   ########################################
   ## Plotting
   ########################################
+  out<-ode_result$out
+  pars<-ode_result$pars
   
   matplot(out[ , 1], out[ , -c(1,2)], type = "l", xlab = "time", ylab = "B",
           main = "Bmod", lwd = 2)
@@ -131,11 +144,10 @@ make_comp_data<-function() {
   }
 }
 
-
 ################################################################
 # CCM environment function
 ################################################################
-ccm_out<-doCCM_environment(list(out=out, pars=pars), "all")
+ccm_out<-doCCM_environment(ode_result, "all")
 
 doCCM_environment<-function(ode_result, target_sp) {
   out<-ode_result[["out"]]

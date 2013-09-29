@@ -1,92 +1,82 @@
-diag(amat)<-1
+####### Lehman biomass model
+a = 1 # resource supply rate
+w = 1 # width of niche
+K = 10 # half-saturation rate
+m = 0.1 # mortality/respiration rate
+Q = 2 # biomass conversion coefficient
+r = 1 # maximum gross productivity
+S = 100 # resource supply point
+xrange = c(20, 30) # range of x environmental variable
+yrange = c(0, 10) # range of y environmental variable
 
+require(deSolve) # load differentail equation solver package
+set.seed(1989)
 
-mmat<-rep(0.0001, 16)
+Bmod <- function(Time, State, Pars) {
+  with(as.list(c(State, Pars)), {
+    xt<-xlist[floor(Time)]
+    yt<-ylist[floor(Time)]
 
-
-
-####### Run simulation in one grid
-
-Ntmat<-matrix(nrow=20,ncol=16);
-Ntmat[1,]<-0.0
-
-j<-1
-Kmat[j]<-1
-
-Ntmat<-matrix(nrow=20, ncol=nspec)
-Ntmat[1,]<-0.01
-
-for(i in 2:20) {
-  Ntmat[i,]<-Ntmat[i-1,]+Ntmat[i-1,]*rmat*(1-Ntmat[i-1,]%*%amat)/Kmat[j]
-}
-
-matplot(1:20, Ntmat, type="l")
-
-CCmod <- function(Time, Ntvec, Pars) {
-  with(as.list(c(Ntvec, Pars)), {
+    gix<-r*exp(-0.5*((abs(xopt-xt)*(xstr)+abs(yopt-yt)*(1-xstr))/w)^2)
     
-    dNtvec<-Ntmat*rmat*(1-Ntmat%*%amat)/Kmat[j]
+    dB<-(gix*(State[1]/(State[1]+K))-m)*State[-1]
+    dR<-a*(S-State[1])-sum(Q*gix*(State[1]/(State[1]+K)*State[-1]))
     
-    return(list(c(dNtvec)))
+    return(list(c(dR, dB)))
   })
 }
 
-nspec<-6
-pars  <- list(rmat=sort(runif(nspec, min=0.01, max=1)),
-              Kmat<-rep(1, nspec),
-              amat<-matrix(nrow=nspec, ncol=nspec, data=runif(nspec^2)))
-
-yini  <- c(rep(0.01, nspec))
-times <- seq(0, 100, by = 1)
-
-CCmod(1, yini, pars)
-require(deSolve)
-out   <- ode(yini, times, CCmod, pars)
-
+nspec<-12
+pars  <- list(a = 1,
+              w = 1,
+              K = 10,
+              m = 0.1,
+              Q = 2,
+              r = 1,
+              S = 100,
+              xrange = c(20, 30),
+              yrange = c(0, 10))
 
 
-matplot(out[,1], out[,-1], type="l")
+B <- c(rep(0.01, nspec))
+R <- 100
+yini<-c(R, B)
+times <- seq(1, 200, by = 1)
 
+pars$xlist<-runif(max(times), min=pars$xrange[1], max=pars$xrange[2])
+pars$ylist<-runif(max(times), min=pars$yrange[1], max=pars$yrange[2])
 
-prodmat<-rowSums(Ntmat)
-divmat<-rowSums(Ntmat>0.001)
+pars$xstr<-0.5
 
-plot(1:1000, prodmat, type='l')
-plot(1:1000, divmat, type='l')
+pars$xopt<-runif(nspec, min=pars$xrange[1], max=pars$xrange[2])
+pars$yopt<-runif(nspec, min=pars$yrange[1], max=pars$yrange[2])
 
+out   <- ode(yini, times, Bmod, pars)
+########################################
+## Plotting
+########################################
 
-#######
-require(deSolve)
+matplot(out[ , 1], out[ , -c(1,2)], type = "l", xlab = "time", ylab = "B",
+        main = "Bmod", lwd = 2)
+plot(out[,1], out[,2], type="l", xlab="time", ylab="R")
+plot(out[ , 1], rowSums(out[ , -c(1,2)]), type = "l", xlab = "time", ylab = "B",
+        main = "Bmod", lwd = 2)
+plot(out[,1], pars$xlist, type="s", xlab="time", ylab="x")
+plot(out[,1], pars$ylist, type="s", xlab="time", ylab="y")
 
-CCmod <- function(Time, Ntvec, Pars) {
-  with(as.list(c(Ntvec, Pars)), {
-    veclen<-length(Ntvec)
-    
-    dNtvec<-cvec*Ntvec*(1-D-sum(Ntvec)) - mvec*Ntvec
-    dNtvec[-1]<-dNtvec[-1] - cumsum(Ntvec[-veclen]*cvec[-veclen])*Ntvec[-1]
-    dNtvec[-veclen]<-dNtvec[-veclen] + rev(cumsum(rev(Ntvec)[-veclen]))*cvec[-veclen]*Ntvec[-veclen]
-    
-    dNtvec[Ntvec<0]<--Ntvec[Ntvec<0]
-    dNtvec[Ntvec>1]<--Ntvec[Ntvec>1]
-    
-    return(list(c(dNtvec)))
-  })
+#Plot niche space
+plot(pars$xrange, c(0,1), xlab="x", ylab="f", type="n", main="x niche space")
+dlist<-seq(20,30,by=0.1)
+for(i in pars$xopt) {
+  lines(dlist, r*exp(-0.5*((abs(i-dlist))/w)^2))
 }
 
-nspec<-6
-pars  <- list(cvec = c(1,2,4,16,32,64),
-           mvec = rep(0.2, nspec),
-           D = 0.25)
+plot(pars$yrange, c(0,1), xlab="y", ylab="f", type="n", main="y niche space")
+dlist<-seq(0,10,by=0.1)
+for(i in pars$yopt) {
+  lines(dlist, r*exp(-0.5*((abs(i-dlist))/w)^2))
+}
 
-yini  <- c(rep(0.01, nspec))
-times <- seq(0, 20, by = 1)
 
-CCmod(1, yini, pars)
 
-out   <- ode(yini, times, CCmod, pars)
-
-## User specified plotting
-matplot(out[ , 1], out[ , -1], type = "l", xlab = "time", ylab = "pcover",
-        main = "CCmod", lwd = 2)
-legend("topright", as.character(pars$cvec), col = 1:nspec, lty = 1:nspec, cex=0.8, ncol=3)
 
