@@ -3,7 +3,7 @@
 void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]);
 void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho);
 void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int *ptau, int *plengtht, int *pLibLength, int *DesiredL, int *plengthDesL, int *piterations, double *varrho, int *acceptablelib, int *plengthacceptablelib) {
-    int i, j, k, l, from, to, slide, count, slidetrip=0, nloop, lindex;
+    int i, j, k, l, from, to, slide, count, slidetrip=0, lindex;
     double distsv, sumu, sumaest, sumw;
     int E = *pE;
 	int nneigh=E+1;
@@ -55,7 +55,6 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
 				integerpos=floor(runif(0,1)*(lengthacceptablelib));
       				count=acceptablelib[integerpos]; //Random number generator
 			}
-			nloop=from;
                     
                     for(i=from; i<LibLength; i++) { //Predict all points in A using information from the minimized library
                         for(j=from; j<=to; j++) { // scroll across elements in minimized L (based on lengthDesL, including wrapping)
