@@ -2,7 +2,7 @@
 #include <Rmath.h>
 void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]);
 void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho);
-void CCM_varL_130409(double *A, double *Aest, double *B, double *rho, int *pE, int *ptau, int *plengtht, int *pLibLength, int *DesiredL, int *plengthDesL, int *piterations, double *varrho, int *acceptablelib, int *plengthacceptablelib) {
+void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int *ptau, int *plengtht, int *pLibLength, int *DesiredL, int *plengthDesL, int *piterations, double *varrho, int *acceptablelib, int *plengthacceptablelib) {
     int i, j, k, l, from, to, slide, count, slidetrip=0, nloop, lindex;
     double distsv, sumu, sumaest, sumw;
     int E = *pE;
