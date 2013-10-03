@@ -1,8 +1,8 @@
 #include <R.h>
 #include <Rmath.h>
 void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]);
-void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength);
-void CCM_varL_130409(double *A, double *Aest, double *B, double *rho, int *pE, int *ptau, int *plengtht, int *pLibLength, int *DesiredL, int *plengthDesL) {
+void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho);
+void CCM_varL_130409(double *A, double *Aest, double *B, double *rho, int *pE, int *ptau, int *plengtht, int *pLibLength, int *DesiredL, int *plengthDesL, int *piterations, double *varrho, int *acceptablelib, int *plengthacceptablelib) {
     int i, j, k, l, from, to, slide, count, slidetrip=0, nloop, lindex;
     double distsv, sumu, sumaest, sumw;
     int E = *pE;
@@ -13,7 +13,13 @@ void CCM_varL_130409(double *A, double *Aest, double *B, double *rho, int *pE, i
     int LibLength= *pLibLength;
     int neighbors[E+1];
     double u[E+1], w[E+1], distances[LibLength];
-	int LibUse[LibLength];
+    int LibUse[LibLength];
+    int iterations = *piterations;
+    int lengthacceptablelib = *plengthacceptablelib;
+    int integerpos;
+    GetRNGstate(); // Load seed for random number generation, R base
+
+    
     /* Code to implement Sugihara&al 2012 CCM algorithm to determing causality */
     /* Checks to see that *A causes *B */
     /* Note that *A and *B must be the same length, and standardized to same timestep */
@@ -32,48 +38,27 @@ void CCM_varL_130409(double *A, double *Aest, double *B, double *rho, int *pE, i
         } /* Catch values that fall outside of feasible library */
         to=l; // Set "end" of library for each iteration
         if(slidetrip==0) { // Trigger to end function when we reach the end of the library
-			count=from;
+            for(slide=from; slide<iterations; slide++) { // Move sized library across LibLengh-tau*(E-1) times - define elements
+		if(slidetrip==0) {
+			integerpos=floor(runif(0,1)*(lengthacceptablelib));
+      			count=acceptablelib[integerpos]; //Random number generator - populates Count with an entry that has enough of a history for give E.
 			for(j=from; j<=to; j++){ /* create first round of L assignments */
 				// Use "skipvector" to identify regions with holes, and leave them out of the library.
 
 
 				if(count<LibLength) { // If we have not yet "wrapped around" to the beginning of the data
 					LibUse[j]=count;
-					count=count+1;
 				}else{ // Otherwise, account for "jump" over the end of the library
 					LibUse[j]=count-(LibLength-(tau*(E-1)));
-					count=count+1;
-				} // LibUse is now a vector of positions, including any wrapping around the Library that was required.
+				} // LibUse is now a vector of positions, based on acceptable starting points (don't "jump" over gaps), including any wrapping around the Library that was required.
+
+				integerpos=floor(runif(0,1)*(lengthacceptablelib));
+      				count=acceptablelib[integerpos]; //Random number generator
 			}
 			nloop=from;
-			
-            for(slide=from; slide<LibLength; slide++) { // Move sized library across LibLengh-tau*(E-1) times - define elements
-		//// Here is where we will need to update the script to find "iter" starting places, rather than sliding along the whole library. ##############
-		//// This will involve updating LibUse completely each time. ##############
-
-		if(slidetrip==0) {
-                    if(slide>from) { /* after first loop, modify L for subsequent loops */
-                        if(count==(LibLength)) { // Once we reach the end of the dataset, we loop back around to the beginning
-                            count=(tau*(E-1));
-                        }
-                        
-                        LibUse[nloop]=count; // "Walk" up LibUse to move the back of the vector forward. I.e., we take the last element of LibUse and replace it with the first. This is equivalent to moving and wrapping, but takes less space.
-			//E.g., wiht L = 5, we take {1, 2, 3, 4}; -> {5, 2, 3, 4}; -> {5, 1, 3, 4}; etc.
-                        count=count+1;
-                        
-                        if(nloop<to) { // Increment nloop to either increase by 1, or wrap around to the beginning of the list
-                            nloop=nloop+1;
-                        } else {
-                            nloop=from;
-                        }
-                    }
                     
                     for(i=from; i<LibLength; i++) { //Predict all points in A using information from the minimized library
                         for(j=from; j<=to; j++) { // scroll across elements in minimized L (based on lengthDesL, including wrapping)
-			    /// Now, we need to remove any points that are not contiguous (e.g., "gaps" in the library)  ##############
-			    /// We will need to exclude any J from the list that "jumps" over a gap. ##############
-
-			    /// Skip over any gaps, subtract number of removed terms from tom, if to and ffrom are not far enough apart skip get order and rho caloc. ##############
                             distances[LibUse[j]]=0;
                             for(k=0; k<E; k++) {
                                 distances[LibUse[j]]=distances[LibUse[j]]+pow((B[i-tau*k]-B[LibUse[j]-tau*k]),2); //calculate distances between points on shadow manifold for all E lagged dimensions
@@ -121,7 +106,7 @@ void CCM_varL_130409(double *A, double *Aest, double *B, double *rho, int *pE, i
                         }
                         Aest[i]=sumaest; /* calculate Aest */
                     }
-                    getrho(A, Aest, rho, from, to, l, LibLength);
+                    getrho(A, Aest, rho, from, to, l, LibLength, varrho);
                     if(to==LibLength-1) {
                         slidetrip=1;
                     }
@@ -129,9 +114,12 @@ void CCM_varL_130409(double *A, double *Aest, double *B, double *rho, int *pE, i
             }
         }
         if(slidetrip==0) {
-            rho[l]=rho[l]/(LibLength-tau*(E-1)); /// We now need either to save all outputs, or more likely, a 95% CI for the data  ############## Perhaps just save an SD? Or a 95% ci.
+            rho[l]=rho[l]/iterations; // Calcualte mean of rho values
+            varrho[l]=varrho[l]/iterations; // Calculate mean of rho squared
+            varrho[l]=varrho[l]-pow(rho[l], 2); // Calculate variance of rho
         }
     }
+    PutRNGstate(); // Free up state of R random number generator
 }
 
 void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]) {
@@ -171,7 +159,7 @@ void getorder(int neighbors[], double distances[], int E, int from, int to, int 
     }
 }
 
-void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength) {
+void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho) {
     /*Calculate Pearson correlation coefficient between A and Aest*/
     int j, n=0;
     double xbar=0, ybar=0, rhocalc=0, xyxybar=0, xxbarsq=0, yybarsq=0;
@@ -189,4 +177,6 @@ void getrho(double A[], double Aest[], double rho[], int from, int to, int l, in
     }
     rhocalc=xyxybar/(sqrt(xxbarsq)*sqrt(yybarsq));
     rho[l]=rho[l]+rhocalc;
+    varrho[l]=varrho[l]+pow(rhocalc, 2); //Save rho squared, for calculating variance
 }
+
