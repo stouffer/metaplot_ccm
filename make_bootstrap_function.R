@@ -1,4 +1,8 @@
 setwd("~/Dropbox/Active Work/Sugihara/Metacommunity_CCM/")
+source("CCM_single_Library.R")
+
+  program_init()
+  ode_result<-make_comp_data(seednum=1000, xstr=0.5,  times=seq(1, 200, by = 1), x_mean_sd = c(25, 1), y_mean_sd = c(5, 1))
 
 program_init_bootstrap<-function() {
   #########################
@@ -42,7 +46,8 @@ CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), i
           plength=as.integer(plengtht), pLibLength=as.integer(pLibLength),DesiredL=as.integer(DesiredL), plengthDesL=as.integer(length(DesiredL)),
           piterations=as.integer(iterations), varrho=as.double(varrho), acceptablelib=as.integer(acceptablelib), plengthacceptablelib=as.integer(lengthacceptablelib))
   out$Aest[out$Aest==0]<-NA #Mark values that were not calculated  
-  return(list(A=out$A, Aest=out$Aest, B=out$B, rho=out$rho[out$rho!=0], varrho=out$varrho[out$rho!=0], Lobs=(1:length(A))[out$rho!=0]-E+1, E=out$E, tau=out$tau, FULLinfo=out, rejectedL=rejectedL))
+  sdevrho<-sqrt(out$varrho[out$rho!=0]) #Calculate standard deviation
+  return(list(A=out$A, Aest=out$Aest, B=out$B, rho=out$rho[out$rho!=0], varrho=out$varrho[out$rho!=0], sdevrho=sdevrho, Lobs=(1:length(A))[out$rho!=0]-E+1, E=out$E, tau=out$tau, FULLinfo=out, rejectedL=rejectedL))
 }
 
 
@@ -51,7 +56,7 @@ program_init_bootstrap()
 
 x<-ode_result$out[,2]
 y<-ode_result$out[,3]
-system.time(ccm_old_out<-CCM_varL(x, y, E=2, tau=1))
+system.time(ccm_old_out<-CCM_varL(x[1:150], y[1:150], E=2, tau=1))
   
   
 x[seq(10, 200, by=10)]<-NA
@@ -65,9 +70,7 @@ system.time(ccm_out<-CCM_boot(x, y, E=2, tau=1, iterations=1000)) #30 seconds fo
 #Try with NON correct functions
 x<-ode_result$out[,2]
 y<-runif(length(x))
-system.time(ccm_old_out_2<-CCM_varL(x, y, E=2, tau=1))
-plot(ccm_old_out_2$Lobs, ccm_old_out_2$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="No causation", ylim=c(-0.2, 0.05))
-
+system.time(ccm_old_out_2<-CCM_varL(x[1:150], y[1:150], E=2, tau=1))
 
 x[seq(10, 200, by=10)]<-NA
 y[seq(10, 200, by=10)]<-NA
@@ -77,15 +80,15 @@ y[seq(10, 200, by=10)]<-NA
 system.time(ccm_out_2<-CCM_boot(x, y, E=2, tau=1, iterations=1000)) #30 seconds for L=157 with 1000 boots
 
 
-pdf("bootstrap_v_wrapping.pdf", width=8.5, height=11)
+pdf("bootstrap_v_wrapping_equilized.pdf", width=8.5, height=11)
 par(mfrow=c(2,1))
-plot(ccm_old_out$Lobs, ccm_old_out$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="Yes causation")
+plot(ccm_old_out$Lobs, ccm_old_out$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="Yes causation", xlim=c(0, 170))
 legend(100, 0.2, c("Wrapping", "Boot Strapping"), col=c(1,2), lwd=2, bty="n", cex=1.2);
 #ccm_out$varrho<-sqrt(ccm_out$varrho)*(1/sqrt(1000))
 matlines(ccm_out$Lobs, cbind(ccm_out$rho, ccm_out$rho-ccm_out$varrho, ccm_out$rho+ccm_out$varrho),
          col=2, lty=c(1,2,2), lwd=2)
 
-plot(ccm_old_out_2$Lobs, ccm_old_out_2$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="No causation", ylim=c(-0.2, 0.05))
+plot(ccm_old_out_2$Lobs, ccm_old_out_2$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="No causation", ylim=c(0, 0.2), xlim=c(0, 170))
 #ccm_out_2$varrho<-sqrt(ccm_out_2$varrho)
 matlines(ccm_out_2$Lobs[-196], cbind(ccm_out_2$rho, ccm_out_2$rho-ccm_out_2$varrho, ccm_out_2$rho+ccm_out_2$varrho)[-196,],
          col=2, lty=c(1,2,2), lwd=2)

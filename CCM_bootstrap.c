@@ -38,7 +38,7 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
         } /* Catch values that fall outside of feasible library */
         to=l; // Set "end" of library for each iteration
         if(slidetrip==0) { // Trigger to end function when we reach the end of the library
-            for(slide=from; slide<iterations; slide++) { // Move sized library across LibLengh-tau*(E-1) times - define elements
+            for(slide=from; slide<iterations; slide++) { // Run a step for each desired iteration
 		if(slidetrip==0) {
 			integerpos=floor(runif(0,1)*(lengthacceptablelib));
       			count=acceptablelib[integerpos]; //Random number generator - populates Count with an entry that has enough of a history for give E.
@@ -56,7 +56,8 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
       				count=acceptablelib[integerpos]; //Random number generator
 			}
                     
-                    for(i=from; i<LibLength; i++) { //Predict all points in A using information from the minimized library
+                    for(int ii=0; ii<lengthacceptablelib; ii++) { //Predict all points in A using information from the minimized library
+                    	i=acceptablelib[ii]; // Make sure we only predict points that have suitable time lag information
                         for(j=from; j<=to; j++) { // scroll across elements in minimized L (based on lengthDesL, including wrapping)
                             distances[LibUse[j]]=0;
                             for(k=0; k<E; k++) {
@@ -131,7 +132,6 @@ void getorder(int neighbors[], double distances[], int E, int from, int to, int 
         n=n+1; /* #### scroll across elements in L (including wrapping) #### */
     }
 	neighbors[0]=LibUse[from+n];
-    
     for(ii=(from+n); ii<=to; ii++) { /* #### scroll across elements in L (including wrapping) #### */
         trip=0;
         for(j=0; j<nneigh; j++) {
