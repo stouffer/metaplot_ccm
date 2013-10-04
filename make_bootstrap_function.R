@@ -47,18 +47,46 @@ CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), i
 
 
 #### Make fake data to analyze
+program_init_bootstrap()
+
 x<-ode_result$out[,2]
 y<-ode_result$out[,3]
+system.time(ccm_old_out<-CCM_varL(x, y, E=2, tau=1))
+  
+  
+x[seq(10, 200, by=10)]<-NA
+y[seq(10, 200, by=10)]<-NA
+
+
+# Run functions!!
+system.time(ccm_out<-CCM_boot(x, y, E=2, tau=1, iterations=1000)) #30 seconds for L=157 with 1000 boots
+
+
+#Try with NON correct functions
+x<-ode_result$out[,2]
+y<-runif(length(x))
+system.time(ccm_old_out_2<-CCM_varL(x, y, E=2, tau=1))
+plot(ccm_old_out_2$Lobs, ccm_old_out_2$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="No causation", ylim=c(-0.2, 0.05))
+
 
 x[seq(10, 200, by=10)]<-NA
 y[seq(10, 200, by=10)]<-NA
 
 
 # Run functions!!
-program_init_bootstrap()
-system.time(ccm_out<-CCM_boot(x, y, E=2, tau=1, iterations=1000)) #30 seconds for L=157 with 1000 boots
+system.time(ccm_out_2<-CCM_boot(x, y, E=2, tau=1, iterations=1000)) #30 seconds for L=157 with 1000 boots
 
-matplot(ccm_out$Lobs, cbind(ccm_out$rho, ccm_out$rho-ccm_out$varrho, ccm_out$rho+ccm_out$varrho), type="l",
-        col=1, lty=c(1,2,2), lwd=2,
-        xlab="Library Length", ylab="rho")
 
+pdf("bootstrap_v_wrapping.pdf", width=8.5, height=11)
+par(mfrow=c(2,1))
+plot(ccm_old_out$Lobs, ccm_old_out$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="Yes causation")
+legend(100, 0.2, c("Wrapping", "Boot Strapping"), col=c(1,2), lwd=2, bty="n", cex=1.2);
+#ccm_out$varrho<-sqrt(ccm_out$varrho)*(1/sqrt(1000))
+matlines(ccm_out$Lobs, cbind(ccm_out$rho, ccm_out$rho-ccm_out$varrho, ccm_out$rho+ccm_out$varrho),
+         col=2, lty=c(1,2,2), lwd=2)
+
+plot(ccm_old_out_2$Lobs, ccm_old_out_2$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="No causation", ylim=c(-0.2, 0.05))
+#ccm_out_2$varrho<-sqrt(ccm_out_2$varrho)
+matlines(ccm_out_2$Lobs[-196], cbind(ccm_out_2$rho, ccm_out_2$rho-ccm_out_2$varrho, ccm_out_2$rho+ccm_out_2$varrho)[-196,],
+         col=2, lty=c(1,2,2), lwd=2)
+dev.off()
