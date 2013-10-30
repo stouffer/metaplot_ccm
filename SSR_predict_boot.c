@@ -1,9 +1,10 @@
 #include <R.h>
 #include <Rmath.h>
-void getorder(int neighbors[], double distances[], int E, int lengthacceptablelib, int i, int acceptablelib[], int predstep);
+#include <stdio.h>
+void getorder(int neighbors[], double distances[], int E, int lengthacceptablelib, int i, int acceptablelib[], int predstep, int nneigh);
 void SSR_predict_boot(double *A, double *Aest, double *B, int *pE, int *ptau, int *pBlength, int *pAlength, int *ppredstep, int *prepvec, int *pmatchSugi, int *acceptablelib, int *plengthacceptablelib) {
-    int i, j, k, from, ii, jj;
-    double distsv, sumu, sumaest, sumw;
+    int i=0, j=0, k=0, from, ii=0, jj=0;
+    double distsv=0, sumu, sumaest, sumw;
     int E = *pE;
     int nneigh=E+1;
     int tau = *ptau;
@@ -18,6 +19,11 @@ void SSR_predict_boot(double *A, double *Aest, double *B, int *pE, int *ptau, in
     /* Code to implement Sugihara&al SSR algorithm */
     /* Uses information in B to predict next predstep steps of A */
     /* Note that *A and *B need not be the same size - but if they are the same vector, then repvec must = "1" */
+    
+    if(E+1>lengthacceptablelib) {
+      fprintf(stderr, "Error - cannot use more lags than there are data points \n");
+      exit(1);
+    }
     
     from=(tau*(E-1)); /* starting point in most vectors */
     for(ii=0; ii<lengthacceptablelib; ii++) {	/*  include all indices  */
@@ -58,10 +64,14 @@ void SSR_predict_boot(double *A, double *Aest, double *B, int *pE, int *ptau, in
                 distances[j]=sqrt(distances[j]);
             }
         }
-	getorder(neighbors, distances, E, lengthacceptablelib, i, acceptablelib, predstep); /*find "tme" position of (E+1) closest points to A[i] on B manifold*/
+	getorder(neighbors, distances, E, lengthacceptablelib, i, acceptablelib, predstep, nneigh); /*find "tme" position of (E+1) closest points to A[i] on B manifold*/
         distsv=distances[neighbors[0]];
 
+if(nneigh==(E+1)) { // Make sure we found enough neighbors
+
         sumaest=0.; /* find w, and weighted Aest variables */
+        //fprintf(stderr, "%d\n", nneigh); // Potential error checking
+        
         if(distsv!=0) { /* check whether minimum distance is zero */
             sumu=0.; /* find u for all neighbors, and sumu */
             for(j=0; j<(nneigh); j++) {
@@ -96,14 +106,18 @@ void SSR_predict_boot(double *A, double *Aest, double *B, int *pE, int *ptau, in
             }
         }
         Aest[i]=sumaest; /* calculate Aest */
+} else {
+  Aest[i]=0;
+  } // end if(nneigh == E+1)
+
     }
 }
 
 
-void getorder(int neighbors[], double distances[], int E, int lengthacceptablelib, int i, int acceptablelib[], int predstep) {
+void getorder(int neighbors[], double distances[], int E, int lengthacceptablelib, int i, int acceptablelib[], int predstep, int nneigh) {
     /*find "tme" position of (Ego+1) closest points to B[i] on the shadow manifold*/
     /* include output only for distancesgo >0 */
-    int trip, n, ii, iii, j, k, nneigh;
+    int trip, n, ii, iii, j, k;    
     nneigh=1;
     n=0;
 
@@ -111,7 +125,7 @@ void getorder(int neighbors[], double distances[], int E, int lengthacceptableli
         n=n+1; /* #### scroll across elements in L (including wrapping) #### */
     }
     if(n>=lengthacceptablelib) {
-    	n=lengthacceptablelib;
+    	n=lengthacceptablelib-1;
     }
     neighbors[0]=acceptablelib[0+n];
     for(iii=(0+n); iii<lengthacceptablelib-predstep; iii++) { /* #### scroll across elements in L (including wrapping) #### */
@@ -119,7 +133,7 @@ void getorder(int neighbors[], double distances[], int E, int lengthacceptableli
         trip=0;
         for(j=0; j<nneigh; j++) {
             if((distances[ii]<distances[neighbors[j]])&(ii!=i)&(j>0)) {
-                for(k=(nneigh); k>(j); k--) {
+                for(k=(nneigh); k>(j); k--) { // slide all elements back
                     if(k<(E+1)) {
                         neighbors[k]=neighbors[k-1];
                     }
@@ -135,7 +149,7 @@ void getorder(int neighbors[], double distances[], int E, int lengthacceptableli
         if((trip==0)&(nneigh<(E+1))&(ii!=i)&(neighbors[nneigh-1]!=ii)) { /* Add element if vector is not yet full, but distance is greater than all already recorded */
             neighbors[nneigh]=ii;
             if(nneigh<(E+1)) {
-				nneigh=nneigh+1;
+				      nneigh=nneigh+1;
             }
         }
     }
