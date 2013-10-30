@@ -1,7 +1,7 @@
 #include <R.h>
 #include <Rmath.h>
 void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]);
-void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho);
+void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho, int failediter);
 void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int *ptau, int *plengtht, int *pLibLength, int *DesiredL, int *plengthDesL, int *piterations, double *varrho, int *acceptablelib, int *plengthacceptablelib) {
     int i, j, k, l, from, to, slide, count, slidetrip=0, lindex;
     double distsv, sumu, sumaest, sumw;
@@ -17,6 +17,7 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
     int iterations = *piterations;
     int lengthacceptablelib = *plengthacceptablelib;
     int integerpos;
+    int failediter=0;
     GetRNGstate(); // Load seed for random number generation, R base
 
     
@@ -29,6 +30,7 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
     
     from=(tau*(E-1)); // starting point for most vectors
     for(lindex=0; lindex<lengthDesL; lindex++) { /* try out all desired library sizes, within ((E+1) to LibLengh-tau*(E-1)) */
+    failediter=0;
         l=DesiredL[lindex];
         if(l<(tau*(E-1)+(E+1))) {
             l=(tau*(E-1)+(E+1));
@@ -106,7 +108,7 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
                         }
                         Aest[i]=sumaest; /* calculate Aest */
                     }
-                    getrho(A, Aest, rho, from, to, l, LibLength, varrho);
+                    getrho(A, Aest, rho, from, to, l, LibLength, varrho, failediter);
                     if(to==LibLength-1) {
                         slidetrip=1;
                     }
@@ -114,8 +116,8 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
             }
         }
         if(slidetrip==0) {
-            rho[l]=rho[l]/iterations; // Calcualte mean of rho values
-            varrho[l]=varrho[l]/iterations; // Calculate mean of rho squared
+            rho[l]=rho[l]/(iterations-failediter); // Calcualte mean of rho values
+            varrho[l]=varrho[l]/(iterations-failediter); // Calculate mean of rho squared
             varrho[l]=varrho[l]-pow(rho[l], 2); // Calculate variance of rho
         }
     }
@@ -158,7 +160,7 @@ void getorder(int neighbors[], double distances[], int E, int from, int to, int 
     }
 }
 
-void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho) {
+void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho, int failediter) {
     /*Calculate Pearson correlation coefficient between A and Aest*/
     int j, n=0;
     double xbar=0, ybar=0, rhocalc=0, xyxybar=0, xxbarsq=0, yybarsq=0;
@@ -175,7 +177,11 @@ void getrho(double A[], double Aest[], double rho[], int from, int to, int l, in
         yybarsq=yybarsq+pow(Aest[j]-ybar,2);
     }
     rhocalc=xyxybar/(sqrt(xxbarsq)*sqrt(yybarsq));
-    rho[l]=rho[l]+rhocalc;
-    varrho[l]=varrho[l]+pow(rhocalc, 2); //Save rho squared, for calculating variance
+    if(rhocalc==rhocalc) {
+      rho[l]=rho[l]+rhocalc;
+      varrho[l]=varrho[l]+pow(rhocalc, 2); //Save rho squared, for calculating variance
+    } else {
+      failediter=failediter+1;
+    }
 }
 
