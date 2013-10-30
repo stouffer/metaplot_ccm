@@ -1,5 +1,11 @@
 #setwd("~/Dropbox/Active Work/Sugihara/Metacommunity_CCM/")
 
+#gcc -std=gnu99 -I/usr/share/R/include -DNDEBUG      -fpic  -pipe  -g  -c SSR_predict_boot.c -o SSR_predict_boot.o
+#gcc -std=gnu99 -shared -o SSR_predict_boot.so SSR_predict_boot.o -L/usr/lib/R/lib -lR
+
+#To Do
+# 1) randomize sp community
+
 #program_init()
 #ode_result<-make_comp_data(seednum=2000)
 #plot_output(ode_result)
@@ -84,7 +90,9 @@ SSR_pred_boot<-function(A, B=A, E, tau=1, predstep=1, matchSugi=1) {
   acceptablelib<-which(acceptablelib>0)-1 #Convert into positions in C array
   lengthacceptablelib<-length(acceptablelib)
   
-  #Remove desired libraries that are too long
+  if(E+1>lengthacceptablelib) {
+    print(paste("Error - too few records to test E =", E))
+  } else { # Don't attempt to run algorithm using more lags than datapoints
   A[is.na(A)]<-0; B[is.na(B)]<-0 #Make vectors "C safe"  
   
   out<-.C("SSR_predict_boot", A=as.double(A), Aest=as.double(rep(0, length(A))), B=as.double(B), E=as.integer(E),
@@ -93,60 +101,13 @@ SSR_pred_boot<-function(A, B=A, E, tau=1, predstep=1, matchSugi=1) {
   out$rho<-cor(out$A, out$Aest)
   out$Aest[out$Aest==0]<-NA
   return(out)
-}
-
-################################################################
-# Initialize the C functions for CCM
-################################################################
-program_init<-function() {
-  #########################
-  # Load CCM function
-  #########################
-  file="CCM_varL_130409"
-  if(is.loaded(file)) {dyn.unload(paste(file,".so",sep=""))}
-  if(sum(grep(".so", dir()))>0) {
-    system("rm *.so"); system("rm *.o")
   }
-  system(paste("R CMD SHLIB ",file,".c",sep=""))
-  dyn.load(paste(file,".so",sep=""))
-  
-  
-  file2="SSR_predict_130423"
-  if(is.loaded(file2)) {dyn.unload(paste(file2,".so",sep=""))}
-  system(paste("R CMD SHLIB ",file2,".c",sep=""))
-  dyn.load(paste(file2,".so",sep=""))
 }
-
-CCM_varL<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), plengtht=length(A), pLibLength=length(A), Aest=rep(0, length(A)), rho=rep(0,length(A))) {
-  if(plengtht>pLibLength) {plengtht=pLibLength}
-  DesiredL<-DesiredL+E-2
-  out<-.C("CCM_varL_130409", A=as.double(A), Aest=as.double(Aest), B=as.double(B), rho=as.double(rho), E=as.integer(E), tau=as.integer(tau),
-          plength=as.integer(plengtht), pLibLength=as.integer(pLibLength),DesiredL=as.integer(DesiredL), plengthDesL=as.integer(length(DesiredL)))
-  out$Aest[out$Aest==0]<-NA #Mark values that were not calculated  
-  return(list(A=out$A, Aest=out$Aest, B=out$B, rho=out$rho[out$rho!=0], Lobs=(1:length(A))[out$rho!=0]-E+1, E=out$E, tau=out$tau, FULLinfo=out))
-}
-
-
-
-SSR_pred<-function(A, B=A, E, tau=1, predstep=1, repvec=as.numeric((sum(A==B)==length(A))&(length(A)==length(B))), matchSugi=1) {
-  #Predict elements of A using B
-  #If A=B, uses cross-validation
-  #matchSugi=1 removes only point i in cross validation - if 0, then removes all points within X(t-(E-1)):X(t+1)
-  #repvec=0 if A and B are not the same vector (i.e, not using "leave one out cross validation")
-  out<-.C("SSR_predict_130423", A=as.double(A), Aest=as.double(rep(0, length(A))), B=as.double(B), E=as.integer(E),
-          tau=as.integer(tau),pBlength=as.integer(length(B)), pAlength=as.integer(length(A)), predstep=as.integer(predstep),
-          prepvec=as.integer(repvec), pmatchSugi=as.integer(matchSugi))
-  out$rho<-cor(out$A, out$Aest)
-  out$Aest[out$Aest==0]<-NA
-  return(out)
-}
-
-
 
 ################################################################
 # Generate time series function
 ################################################################
-make_comp_data<-function(nspec=12,
+make_comp_data_boot<-function(nspec=12,
                          a = 1,
                          w = 1,
                          K = 10,
@@ -159,10 +120,11 @@ make_comp_data<-function(nspec=12,
                          xstr=0,
                          B=c(rep(0.01, nspec)),
                          R=100,
-                         times=seq(1, 200, by = 1),
+                         times=seq(1, 100, by = 1),
                          OUrates=c(0.1, 0.1), #strength of return to mean
                          Wrates=c(1, 1), #strength of deviation from mean
-                         seednum=1989
+                         seednum=1989,
+                         number_of_chains=10 #Number of plots
                          ) {
   
   #########################
@@ -226,10 +188,17 @@ make_comp_data<-function(nspec=12,
   
   pars$xopt<-rnorm(nspec, pars$x_mean_sd[1], pars$x_mean_sd[2])
   pars$yopt<-rnorm(nspec, pars$y_mean_sd[1], pars$y_mean_sd[2])
-  yini<-c(R, B)
+  
+  out<-NULL
+  for(plotiter in 1:number_of_chains) {
+    B<-runif(length(B), min=min(B)-B/10, max=max(B)+B/10)
+    R<-runif(length(R), min=min(R)-R/10, max=max(R)+R/10)
+    yini<-c(R, B)
   
   
-  out   <- ode(yini, times, Bmod, pars)
+    out_tmp   <- ode(yini, times, Bmod, pars)
+    out<-rbind(out, as.matrix(out_tmp), NA)
+  }
   
   return(list(out=out, pars=pars))
 }
@@ -238,7 +207,7 @@ make_comp_data<-function(nspec=12,
 ################################################################
 # Make plots of results
 ################################################################
-plot_output<-function(ode_result) {
+plot_output_boot<-function(ode_result) {
   ########################################
   ## Plotting
   ########################################
@@ -250,8 +219,10 @@ plot_output<-function(ode_result) {
   plot(out[,1], out[,2], type="l", xlab="time", ylab="R")
   plot(out[ , 1], rowSums(out[ , -c(1,2)]), type = "l", xlab = "time", ylab = "B",
        main = "Bmod", lwd = 2)
-  plot(out[,1], pars$xlist, type="s", xlab="time", ylab="x")
-  plot(out[,1], pars$ylist, type="s", xlab="time", ylab="y")
+  
+  timelist<-1:(min(which(is.na(out[,1])))-1)
+  plot(out[timelist,1], pars$xlist, type="s", xlab="time", ylab="x")
+  plot(out[timelist,1], pars$ylist, type="s", xlab="time", ylab="y")
   
   #Plot niche space
   plot(range(pars$xopt), c(0,1), xlab="x", ylab="f", type="n", main="x niche space")
@@ -270,7 +241,8 @@ plot_output<-function(ode_result) {
 ################################################################
 # Make E plot
 ################################################################
-makeEplot_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20) {
+target_sp<-"all"; predstep=10; tau=1; maxE=20
+makeEplot_environment_boot<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20) {
   out<-ode_result[["out"]]
   pars<-ode_result[["pars"]]
   
@@ -285,9 +257,9 @@ makeEplot_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=
   Emat<-matrix(nrow=maxE-1, ncol=3); colnames(Emat)<-c("B", "T", "M")
   
   for(E in 2:(maxE)) {
-    Emat[E-1,"B"]<-SSR_pred(A=Biomass_total, E=E, predstep=predstep, tau=tau)$rho
-    Emat[E-1,"T"]<-SSR_pred(A=temperature, E=E, predstep=predstep, tau=tau)$rho
-    Emat[E-1,"M"]<-SSR_pred(A=moisture, E=E, predstep=predstep, tau=tau)$rho
+    Emat[E-1,"B"]<-SSR_pred_boot(A=Biomass_total, E=E, predstep=predstep, tau=tau)$rho
+    Emat[E-1,"T"]<-SSR_pred_boot(A=temperature, E=E, predstep=predstep, tau=tau)$rho
+    Emat[E-1,"M"]<-SSR_pred_boot(A=moisture, E=E, predstep=predstep, tau=tau)$rho
   }
   matplot(2:(maxE), Emat, type="l", col=1:3, lty=1:3,
           xlab="E", ylab="rho", lwd=2,

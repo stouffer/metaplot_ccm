@@ -80,16 +80,16 @@ y[seq(10, 200, by=10)]<-NA
 system.time(ccm_out_2<-CCM_boot(x, y, E=2, tau=1, iterations=1000)) #30 seconds for L=157 with 1000 boots
 
 
-pdf("bootstrap_v_wrapping_equilized.pdf", width=8.5, height=11)
+#pdf("bootstrap_v_wrapping_equilized.pdf", width=8.5, height=11)
 par(mfrow=c(2,1))
-plot(ccm_old_out$Lobs, ccm_old_out$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="Yes causation", xlim=c(0, 170))
+plot(ccm_old_out$Lobs, ccm_old_out$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="Yes causation", xlim=c(0, 170), ylim=c(0, 0.75))
 legend(100, 0.2, c("Wrapping", "Boot Strapping"), col=c(1,2), lwd=2, bty="n", cex=1.2);
 #ccm_out$varrho<-sqrt(ccm_out$varrho)*(1/sqrt(1000))
-matlines(ccm_out$Lobs, cbind(ccm_out$rho, ccm_out$rho-ccm_out$varrho, ccm_out$rho+ccm_out$varrho),
+matlines(ccm_out$Lobs, cbind(ccm_out$rho, ccm_out$rho-ccm_out$sdevrho, ccm_out$rho+ccm_out$sdevrho),
          col=2, lty=c(1,2,2), lwd=2)
 
-plot(ccm_old_out_2$Lobs, ccm_old_out_2$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="No causation", ylim=c(0, 0.2), xlim=c(0, 170))
+plot(ccm_old_out_2$Lobs, ccm_old_out_2$rho, type="l", lwd=2, xlab="Library Length", ylab="rho", main="No causation", ylim=c(0, 0.25), xlim=c(0, 170))
 #ccm_out_2$varrho<-sqrt(ccm_out_2$varrho)
-matlines(ccm_out_2$Lobs[-196], cbind(ccm_out_2$rho, ccm_out_2$rho-ccm_out_2$varrho, ccm_out_2$rho+ccm_out_2$varrho)[-196,],
+matlines(ccm_out_2$Lobs[-196], cbind(ccm_out_2$rho, ccm_out_2$rho-ccm_out_2$sdevrho, ccm_out_2$rho+ccm_out_2$sdevrho)[-196,],
          col=2, lty=c(1,2,2), lwd=2)
-dev.off()
+#dev.off()
