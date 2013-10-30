@@ -39,7 +39,7 @@ program_init_bootstrap<-function() {
 # Run bootstrap CCM
 ################################################################
 
-CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), iterations=1000) {
+CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), iterations=100) {
   #Note - input must have "NA" between any gaps in the library (e.g., if you are "stacking" plots)
   ## Initialize parameters
   plengtht=length(A); pLibLength=length(A); Aest=rep(0, length(A)); rho=Aest; varrho=Aest
@@ -65,12 +65,18 @@ CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), i
   DesiredL<-DesiredL+E-2
   A[is.na(A)]<-0; B[is.na(B)]<-0 #Make vectors "C safe"
   
-  out<-.C("CCM_bootstrap", A=as.double(A), Aest=as.double(Aest), B=as.double(B), rho=as.double(rho), E=as.integer(E), tau=as.integer(tau),
+  if(tau*(E+1+predstep)>lengthacceptablelib) {
+    print(paste("Error - too few records to test E =", E, "and tau =", tau))
+    return(out=list(A=A, Aest=NA, B=B, rho=NA, varrho=NA, sdevrho=NA, Lobs=NA, E=out$E, tau=tau, FULLinfo=NA, rejectedL=NA))
+  } else {
+  
+    out<-.C("CCM_bootstrap", A=as.double(A), Aest=as.double(Aest), B=as.double(B), rho=as.double(rho), E=as.integer(E), tau=as.integer(tau),
           plength=as.integer(plengtht), pLibLength=as.integer(pLibLength),DesiredL=as.integer(DesiredL), plengthDesL=as.integer(length(DesiredL)),
           piterations=as.integer(iterations), varrho=as.double(varrho), acceptablelib=as.integer(acceptablelib), plengthacceptablelib=as.integer(lengthacceptablelib))
   out$Aest[out$Aest==0]<-NA #Mark values that were not calculated  
   sdevrho<-sqrt(out$varrho[out$rho!=0]) #Calculate standard deviation
   return(list(A=out$A, Aest=out$Aest, B=out$B, rho=out$rho[out$rho!=0], varrho=out$varrho[out$rho!=0], sdevrho=sdevrho, Lobs=(1:length(A))[out$rho!=0]-E+1, E=out$E, tau=out$tau, FULLinfo=out, rejectedL=rejectedL))
+  }
 }
 
 SSR_pred_boot<-function(A, B=A, E, tau=1, predstep=1, matchSugi=1) {
@@ -90,8 +96,10 @@ SSR_pred_boot<-function(A, B=A, E, tau=1, predstep=1, matchSugi=1) {
   acceptablelib<-which(acceptablelib>0)-1 #Convert into positions in C array
   lengthacceptablelib<-length(acceptablelib)
   
-  if(E+1>lengthacceptablelib) {
-    print(paste("Error - too few records to test E =", E))
+  if(tau*(E+1+predstep)>lengthacceptablelib) {
+    print(paste("Error - too few records to test E =", E, "tau =", tau, "and prestep =", predstep))
+    return(out=list(A=A, Aest=NA, B=B, E=E, tau=tau, pBlength=length(B), pAlength=length(A), predstep=predstep,
+      prepvec=repvec, pmatchSugi=matchSugi, acceptablelib=acceptablelib, plengthacceptablelib=lengthacceptablelib, rho=NA))
   } else { # Don't attempt to run algorithm using more lags than datapoints
   A[is.na(A)]<-0; B[is.na(B)]<-0 #Make vectors "C safe"  
   
@@ -241,7 +249,7 @@ plot_output_boot<-function(ode_result) {
 ################################################################
 # Make E plot
 ################################################################
-target_sp<-"all"; predstep=10; tau=1; maxE=20
+#target_sp<-"all"; predstep=10; tau=1; maxE=20
 makeEplot_environment_boot<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20) {
   out<-ode_result[["out"]]
   pars<-ode_result[["pars"]]
@@ -266,12 +274,23 @@ makeEplot_environment_boot<-function(ode_result, target_sp, predstep=10, tau=1, 
           main=paste("pred. step = ", predstep, "; tau = ", tau, sep=""))
   legend("bottomleft", c("Biomass", "Temperature", "Moisture"), lty=1:3, col=1:3, lwd=2, bty="n")
   
-  E_temp<-min(which(Emat[,2]>=(quantile(Emat[,2], 0.95)-0.01)))+1
-  E_moist<-min(which(Emat[,3]>=(quantile(Emat[,3], 0.95)-0.01)))+1
-  E_biom<-min(which(Emat[,1]>=(quantile(Emat[,1], 0.95)-0.01)))+1
+  E_temp<-min(which(Emat[,2]>=(quantile(Emat[,2], 0.95, na.rm=T)-0.01)))+1
+  E_moist<-min(which(Emat[,3]>=(quantile(Emat[,3], 0.95, na.rm=T)-0.01)))+1
+  E_biom<-min(which(Emat[,1]>=(quantile(Emat[,1], 0.95, na.rm=T)-0.01)))+1
   
   return(list(Emat=Emat, Euse=c(E_temp=E_temp, E_moist=E_moist, E_biom=E_biom)))
 }
+
+
+
+
+
+
+##################
+
+
+
+
 
 ################################################################
 # Make E plot species
@@ -291,16 +310,16 @@ makeEplot_species<-function(ode_result, target_sp_1, target_sp_2, predstep=10, t
   Emat<-matrix(nrow=maxE-1, ncol=2); colnames(Emat)<-c("B", "T")
   
   for(E in 2:maxE) {
-    Emat[E-1,"B"]<-SSR_pred(A=Biomass_total_1, E=E, predstep=predstep, tau=tau)$rho
-    Emat[E-1,"T"]<-SSR_pred(A=Biomass_total_2, E=E, predstep=predstep, tau=tau)$rho
+    Emat[E-1,"B"]<-SSR_pred_boot(A=Biomass_total_1, E=E, predstep=predstep, tau=tau)$rho
+    Emat[E-1,"T"]<-SSR_pred_boot(A=Biomass_total_2, E=E, predstep=predstep, tau=tau)$rho
   }
   matplot(2:maxE, Emat, type="l", col=1:2, lty=1:2,
           xlab="E", ylab="rho", lwd=2,
           main=paste("pred. step = ", predstep, "; tau = ", tau, sep=""))
   legend("bottomleft", c("Biomass 1", "Biomass 2"), lty=1:2, col=1:2, lwd=2, bty="n")
   
-  E_biom_2<-min(which(Emat[,2]>=(quantile(Emat[,2], 0.95)-0.01)))+1
-  E_biom_1<-min(which(Emat[,1]>=(quantile(Emat[,1], 0.95)-0.01)))+1
+  E_biom_2<-min(which(Emat[,2]>=(quantile(Emat[,2], 0.95, na.rm=T)-0.01)))+1
+  E_biom_1<-min(which(Emat[,1]>=(quantile(Emat[,1], 0.95, na.rm=T)-0.01)))+1
   
   return(list(Emat=Emat, Euse=c(E_biom_1=E_biom_1, E_biom_2=E_biom_2)))
 }
@@ -309,7 +328,7 @@ makeEplot_species<-function(ode_result, target_sp_1, target_sp_2, predstep=10, t
 ################################################################
 # CCM environment function
 ################################################################
-doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20) {
+doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, ...) {
   out<-ode_result[["out"]]
   pars<-ode_result[["pars"]]
   #########################
@@ -330,24 +349,24 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20) 
   Emat<-matrix(nrow=maxE-1, ncol=3); colnames(Emat)<-c("B", "T", "M")
   
   for(E in 2:maxE) {
-    Emat[E-1,"B"]<-SSR_pred(A=Biomass_total, E=E, predstep=predstep, tau=tau)$rho
-    Emat[E-1,"T"]<-SSR_pred(A=temperature, E=E, predstep=predstep, tau=tau)$rho
-    Emat[E-1,"M"]<-SSR_pred(A=moisture, E=E, predstep=predstep, tau=tau)$rho
+    Emat[E-1,"B"]<-SSR_pred_boot(A=Biomass_total, E=E, predstep=predstep, tau=tau)$rho
+    Emat[E-1,"T"]<-SSR_pred_boot(A=temperature, E=E, predstep=predstep, tau=tau)$rho
+    Emat[E-1,"M"]<-SSR_pred_boot(A=moisture, E=E, predstep=predstep, tau=tau)$rho
   }
   matplot(2:maxE, Emat, type="l", col=1:3, lty=1:3,
           xlab="E", ylab="rho", lwd=2,
           main=paste("pred. step = ", predstep, "; tau = ", tau, sep=""))
   legend("bottomleft", c("Biomass", "Temperature", "Moisture"), lty=1:3, col=1:3, lwd=2, bty="n")
   
-  E_temp<-min(which(Emat[,2]>=(quantile(Emat[,2], 0.95)-0.01)))+1
-  E_moist<-min(which(Emat[,3]>=(quantile(Emat[,3], 0.95)-0.01)))+1
-  E_biom<-min(which(Emat[,1]>=(quantile(Emat[,1], 0.95)-0.01)))+1
+  E_temp<-min(which(Emat[,2]>=(quantile(Emat[,2], 0.95, na.rm=T)-0.01)))+1
+  E_moist<-min(which(Emat[,3]>=(quantile(Emat[,3], 0.95, na.rm=T)-0.01)))+1
+  E_biom<-min(which(Emat[,1]>=(quantile(Emat[,1], 0.95, na.rm=T)-0.01)))+1
   
-  T_cause_B<-CCM_varL(A=temperature, B=Biomass_total, E=E_temp, DesiredL=DesiredL)
-  M_cause_B<-CCM_varL(A=moisture, B=Biomass_total, E=E_moist, DesiredL=DesiredL)
+  T_cause_B<-CCM_boot(A=temperature, B=Biomass_total, E=E_temp, DesiredL=DesiredL, ...)
+  M_cause_B<-CCM_boot(A=moisture, B=Biomass_total, E=E_moist, DesiredL=DesiredL, ...)
   
-  B_cause_T<-CCM_varL(A=Biomass_total, B=temperature, E=E_biom, DesiredL=DesiredL)
-  B_cause_M<-CCM_varL(A=Biomass_total, B=moisture, E=E_biom, DesiredL=DesiredL)
+  B_cause_T<-CCM_boot(A=Biomass_total, B=temperature, E=E_biom, DesiredL=DesiredL, ...)
+  B_cause_M<-CCM_boot(A=Biomass_total, B=moisture, E=E_biom, DesiredL=DesiredL, ...)
   
   return(list(T_cause_B=T_cause_B, M_cause_B=M_cause_B,
                 B_cause_T=B_cause_T, B_cause_M=B_cause_M, Emat=Emat, Euse=c(E_temp=E_temp, E_moist=E_moist, E_biom=E_biom),
@@ -399,9 +418,9 @@ ssr_data<-function(ccm_out, predstepmax=10, tau=1) {
   pred_mat<-matrix(nrow=predstepmax, ncol=3)
   colnames(pred_mat)<-c("B", "T", "M")
   for(predstep in 1:predstepmax) {
-    pred_mat[predstep,"B"]<-SSR_pred(A=ccm_out$datalist$Biomass_total, E=ccm_out$Euse["E_biom"], predstep=predstep, tau=tau)$rho
-    pred_mat[predstep,"T"]<-SSR_pred(A=ccm_out$datalist$temperature, E=ccm_out$Euse["E_temp"], predstep=predstep, tau=tau)$rho
-    pred_mat[predstep,"M"]<-SSR_pred(A=ccm_out$datalist$moisture, E=ccm_out$Euse["E_moist"], predstep=predstep, tau=tau)$rho
+    pred_mat[predstep,"B"]<-SSR_pred_boot(A=ccm_out$datalist$Biomass_total, E=ccm_out$Euse["E_biom"], predstep=predstep, tau=tau)$rho
+    pred_mat[predstep,"T"]<-SSR_pred_boot(A=ccm_out$datalist$temperature, E=ccm_out$Euse["E_temp"], predstep=predstep, tau=tau)$rho
+    pred_mat[predstep,"M"]<-SSR_pred_boot(A=ccm_out$datalist$moisture, E=ccm_out$Euse["E_moist"], predstep=predstep, tau=tau)$rho
   }
   
   matplot(1:predstepmax, pred_mat, type="l", col=1:3, lty=1:3,
@@ -423,9 +442,13 @@ plot_ccm<-function(ccm_out, ylimits=c(0, 1)) {
   #########################
   with(ccm_out, {
   minL<-max(length(T_cause_B$Lobs), length(T_cause_B$rho), length(B_cause_T$rho), length(M_cause_B$rho), length(B_cause_M$rho))
-  matplot(T_cause_B$Lobs[1:minL], cbind(T_cause_B$rho[1:minL], B_cause_T$rho[1:minL], M_cause_B$rho[1:minL], B_cause_M$rho[1:minL]), type="l", main="CCM results", xlab="Library length", ylab="rho", lwd=2,
-          ylim=ylimits, lty=c(1,2,1,2), col=c("black", "black", "red", "red"))
-  legend("topleft", c("Temp. causes Biom.", "Biom. causes Temp.", "Moist. causes Biom.", "Biom. causes Moist."), col=c("black", "black", "red", "red"), lty=c(1,2,1,2), lwd=2, bty="n")
+  matplot(T_cause_B$Lobs[1:minL], cbind(T_cause_B$rho[1:minL],T_cause_B$rho[1:minL]+T_cause_B$sdevrho[1:minL],T_cause_B$rho[1:minL]-T_cause_B$sdevrho[1:minL],
+                                        B_cause_T$rho[1:minL],B_cause_T$rho[1:minL]+B_cause_T$sdevrho[1:minL],B_cause_T$rho[1:minL]-B_cause_T$sdevrho[1:minL],
+                                        M_cause_B$rho[1:minL],M_cause_B$rho[1:minL]+M_cause_B$sdevrho[1:minL],M_cause_B$rho[1:minL]-M_cause_B$sdevrho[1:minL],
+                                        B_cause_M$rho[1:minL],B_cause_M$rho[1:minL]+B_cause_M$sdevrho[1:minL],B_cause_M$rho[1:minL]-B_cause_M$sdevrho[1:minL]),
+          type="l", main="CCM results", xlab="Library length", ylab="rho", lwd=2,
+          ylim=ylimits, lty=c(1,3,3,1,3,3,1,3,3,1,3,3), col=c(rep(1, 3), rep(2, 3), rep(3, 3), rep(4, 3)))
+  legend("topleft", c("Temp. causes Biom.", "Biom. causes Temp.", "Moist. causes Biom.", "Biom. causes Moist."), col=c(1,2,3,4), lty=c(1), lwd=2, bty="n")
   abline(h=0, lty=3, col="darkgrey", lwd=2)
   })
 }
@@ -439,8 +462,8 @@ ssr_sp<-function(ccm_sp, predstepmax=10, tau=1) {
   pred_mat<-matrix(nrow=predstepmax, ncol=2)
   colnames(pred_mat)<-c("B", "T")
   for(predstep in 1:predstepmax) {
-    pred_mat[predstep,"B"]<-SSR_pred(A=ccm_sp$datalist$Biomass_total_1, E=ccm_sp$Euse["E_biom_1"], predstep=predstep, tau=tau)$rho
-    pred_mat[predstep,"T"]<-SSR_pred(A=ccm_sp$datalist$Biomass_total_2, E=ccm_sp$Euse["E_biom_2"], predstep=predstep, tau=tau)$rho
+    pred_mat[predstep,"B"]<-SSR_pred_boot(A=ccm_sp$datalist$Biomass_total_1, E=ccm_sp$Euse["E_biom_1"], predstep=predstep, tau=tau)$rho
+    pred_mat[predstep,"T"]<-SSR_pred_boot(A=ccm_sp$datalist$Biomass_total_2, E=ccm_sp$Euse["E_biom_2"], predstep=predstep, tau=tau)$rho
   }
   
   matplot(1:predstepmax, pred_mat, type="l", col=1:2, lty=1:2,

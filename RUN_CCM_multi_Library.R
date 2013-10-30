@@ -7,10 +7,15 @@ ode_result<-make_comp_data_boot(seednum=1000, xstr=0.5,  times=seq(1, 50, by = 1
 plot_output_boot(ode_result)
 
 #Compare species to environment
-eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=2, predstep=tau)
-ccm_out<-doCCM_environment(ode_result, "all", tau=2)
-ssr_out<-ssr_data(ccm_out, predstepmax=10, tau=5)
+eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=tau, maxE=5)
+ccm_out<-doCCM_environment(ode_result, "all", tau=1, maxE=5, iterations=100)
+ssr_out<-ssr_data(ccm_out, predstepmax=10, tau=1)
 plot_ccm(ccm_out,  ylimits=c(-0.2, 1))
+
+####
+The below still need to be fixed
+##
+
 
 #Compare species
 eplot_sp_out<-makeEplot_species(ode_result, 1, 2, tau=2, predstep=tau)
