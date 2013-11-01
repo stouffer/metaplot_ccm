@@ -33,6 +33,11 @@ program_init_bootstrap<-function() {
   if(is.loaded(file2)) {dyn.unload(paste(file2,".so",sep=""))}
   system(paste("R CMD SHLIB ",file2,".c",sep=""))
   dyn.load(paste(file2,".so",sep=""))
+  
+  file3="bmod"
+  if(is.loaded(file3)) {dyn.unload(paste(file3,".so",sep=""))}
+  system(paste("R CMD SHLIB ",file3,".c",sep=""))
+  dyn.load(paste(file3,".so",sep=""))
 }
 
 ################################################################
@@ -65,7 +70,7 @@ CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), i
   DesiredL<-DesiredL+E-2
   A[is.na(A)]<-0; B[is.na(B)]<-0 #Make vectors "C safe"
   
-  if(tau*(E+1+predstep)>lengthacceptablelib) {
+  if(tau*(E+1)>lengthacceptablelib) {
     print(paste("Error - too few records to test E =", E, "and tau =", tau))
     return(out=list(A=A, Aest=NA, B=B, rho=NA, varrho=NA, sdevrho=NA, Lobs=NA, E=out$E, tau=tau, FULLinfo=NA, rejectedL=NA))
   } else {
@@ -113,7 +118,7 @@ SSR_pred_boot<-function(A, B=A, E, tau=1, predstep=1, matchSugi=1) {
 }
 
 ################################################################
-# Generate time series function
+# Generate time series function, conventional
 ################################################################
 make_comp_data_boot<-function(nspec=12,
                          a = 1,
@@ -123,8 +128,8 @@ make_comp_data_boot<-function(nspec=12,
                          Q = 2,
                          r = 1,
                          S = 100,
-                         x_mean_sd = c(20, 30),
-                         y_mean_sd = c(0, 10),
+                         x_mean_sd = c(25, 1),
+                         y_mean_sd = c(25, 1),
                          xstr=0,
                          B=c(rep(0.01, nspec)),
                          R=100,
@@ -138,7 +143,7 @@ make_comp_data_boot<-function(nspec=12,
   #########################
   # Load diffeq function
   #########################
-  
+  times<-seq(1, max(times), by=1)
   pars=list(a = a,
             w = w,
             K = K,
@@ -147,15 +152,19 @@ make_comp_data_boot<-function(nspec=12,
             r = r,
             S = S,
             x_mean_sd = x_mean_sd,
-            y_mean_sd = y_mean_sd)
+            y_mean_sd = y_mean_sd,
+            times=times)
   
   require(deSolve) # load differentail equation solver package
+  if(seednum) {
   set.seed(seednum)
+  }
   
   Bmod <- function(Time, State, Pars) {
     with(as.list(c(State, Pars)), {
-      xt<-xlist[floor(Time)]
-      yt<-ylist[floor(Time)]
+      tpos<-which(times==floor(Time))
+      xt<-xlist[tpos]
+      yt<-ylist[tpos]
       
       gix<-r*exp(-0.5*((abs(xopt-xt)*(xstr)+abs(yopt-yt)*(1-xstr))/w)^2)
       
@@ -169,16 +178,16 @@ make_comp_data_boot<-function(nspec=12,
   #########################
   # make climate variables
   #########################
-  xlist<- numeric(length(times))
-  ylist<- numeric(length(times))
+  xlist<- numeric(max(times))
+  ylist<- numeric(max(times))
   
-  xmid<-pars$x_mean_sd[1]
-  ymid<-pars$y_mean_sd[1]
+  xmid<-x_mean_sd[1]
+  ymid<-y_mean_sd[1]
     
-  xlist[1]<-runif(1, min=pars$x_mean_sd[1]-2*pars$x_mean_sd[2], max=pars$x_mean_sd[1]+2*pars$x_mean_sd[2])
-  ylist[1]<-runif(1, min=pars$y_mean_sd[1]-2*pars$y_mean_sd[2], max=pars$y_mean_sd[2]+2*pars$y_mean_sd[2])
-  Wxlist<-rnorm(length(times), 0, Wrates[1]) #White noise for x
-  Wylist<-rnorm(length(times), 0, Wrates[2]) #White noise for y
+  xlist[1]<-runif(1, min=max(x_mean_sd[1]-2*x_mean_sd[2],0), max=x_mean_sd[1]+2*x_mean_sd[2])
+  ylist[1]<-runif(1, min=max(y_mean_sd[1]-2*y_mean_sd[2],0), max=y_mean_sd[2]+2*y_mean_sd[2])
+  Wxlist<-rnorm(max(times), 0, Wrates[1]) #White noise for x
+  Wylist<-rnorm(max(times), 0, Wrates[2]) #White noise for y
   for(i in 2:max(times)) {
     xlist[i]<-xlist[i-1]+(xmid-xlist[i-1])*OUrates[1]+Wxlist[i-1]
     ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
@@ -199,9 +208,8 @@ make_comp_data_boot<-function(nspec=12,
   
   out<-NULL
   for(plotiter in 1:number_of_chains) {
-    B<-runif(length(B), min=min(B)-B/10, max=max(B)+B/10)
-    R<-runif(length(R), min=min(R)-R/10, max=max(R)+R/10)
-    yini<-c(R, B)
+    Biter<-B*sample(c(1,0), length(B), rep=T)
+    yini<-c(R, Biter)
   
   
     out_tmp   <- ode(yini, times, Bmod, pars)
@@ -211,6 +219,99 @@ make_comp_data_boot<-function(nspec=12,
   return(list(out=out, pars=pars))
 }
 
+################################################################
+# Generate time series function, C version
+################################################################
+make_comp_data_boot_Cfxn<-function(a = 1,
+                                   w = 1,
+                                   K = 10,
+                                   m = 0.1,
+                                   Q = 2,
+                                   r = 1,
+                                   S = 100,
+                                   x_mean_sd = c(25, 1),
+                                   y_mean_sd = c(25, 1),
+                                   xstr=0.5,
+                                   B=c(rep(1, 12)),
+                                   R=100,
+                                   times=seq(1, 1000, by = 1),
+                                   OUrates=c(0.1, 0.1), #strength of return to mean
+                                   Wrates=c(1, 1), #strength of deviation from mean
+                                   seednum=1989,
+                                   number_of_chains=10 #Number of plots
+) {
+  nspec=12 # must have 12 species
+  
+  #########################
+  # Load diffeq function
+  #########################
+  require(deSolve) # load differentail equation solver package
+  if(seednum) {
+    set.seed(seednum)
+  }
+  
+  #########################
+  # run diffeq function
+  #########################
+  xopt<-rnorm(nspec, x_mean_sd[1], x_mean_sd[2])
+  yopt<-rnorm(nspec, y_mean_sd[1], y_mean_sd[2])
+  
+  pars=c(OUrates[1], OUrates[2], Wrates[1],Wrates[2],x_mean_sd[1],  y_mean_sd[1],xstr,  Q,  r,  S,  a,  m,  K,  w,  xopt, yopt)
+  
+  xlist<- numeric(max(times))
+  ylist<- numeric(max(times))
+  xmid<-x_mean_sd[1]
+  ymid<-y_mean_sd[1]
+  
+  xlist[1]<-runif(1, min=max(x_mean_sd[1]-2*x_mean_sd[2],0), max=x_mean_sd[1]+2*x_mean_sd[2])
+  ylist[1]<-runif(1, min=max(y_mean_sd[1]-2*y_mean_sd[2],0), max=y_mean_sd[1]+2*y_mean_sd[2])
+  Wxlist<-rnorm(max(times), 0, Wrates[1]) #White noise for x
+  Wylist<-rnorm(max(times), 0, Wrates[2]) #White noise for y
+  for(i in 2:max(times)) {
+    xlist[i]<-xlist[i-1]+(xmid-xlist[i-1])*OUrates[1]+Wxlist[i-1]
+    ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
+  } #Check out speed of response (Smapping - which work, which don't? Fully stochastic vs. some signal)
+  
+  forcings <- list(x=cbind(times,xlist), y=cbind(times,ylist))
+  #matplot(times, cbind(xlist, ylist), type="s", ylab="Climvar")
+  
+  out<-NULL
+  for(plotiter in 1:number_of_chains) {
+    Biter<-B*sample(c(1,0), length(B), rep=T)
+    parms<-pars
+    parms[which(Biter==0)+14]<-0
+    
+    yini<-c(R, Biter)
+    out_tmp   <- ode(y=yini, times=times, func="derivs",
+                     parms=parms, dllname="bmod", initforc="forcc",
+                     forcings=forcings, initfun="parmsc", nout=14,
+                     outnames=NULL, jacfun="jac", 
+                     method="ode23")
+    
+    #plot(out_tmp[,1], out_tmp[,2], type="l", ylab="R", xlab="time")
+    #matplot(out_tmp[,1], out_tmp[,3:(3+12)], type="l", ylab="Sp", xlab="time")
+    #matplot(out_tmp[,1], out_tmp[,which(Biter==0)+2], type="l", ylab="dead sp", xlab="time")
+    out<-rbind(out, as.matrix(out_tmp), NA)
+  }
+  
+  pars_save=list(a = a,
+                 w = w,
+                 K = K,
+                 m = m,
+                 Q = Q,
+                 r = r,
+                 S = S,
+                 x_mean_sd = x_mean_sd,
+                 y_mean_sd = y_mean_sd,
+                 times=times,
+                 xstr=xstr,
+                 xlist=xlist,
+                 ylist=ylist,
+                 xopt=xopt,
+                 yopt=yopt)
+  
+  return(list(out=out, pars=pars_save))
+}
 
 ################################################################
 # Make plots of results
@@ -240,17 +341,17 @@ plot_output_boot<-function(ode_result) {
   }
   
   plot(range(pars$yopt), c(0,1), xlab="y", ylab="f", type="n", main="y niche space")
-  dlist<-seq(0,10,by=0.1)
+  dlist<-seq(20,30,by=0.1)
   for(i in pars$yopt) {
     lines(dlist, pars$r*exp(-0.5*((abs(i-dlist))/pars$w)^2))
   }
-}
+d}
 
 ################################################################
 # Make E plot
 ################################################################
 #target_sp<-"all"; predstep=10; tau=1; maxE=20
-makeEplot_environment_boot<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20) {
+makeEplot_environment_boot<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, matchSugi=1) {
   out<-ode_result[["out"]]
   pars<-ode_result[["pars"]]
   
@@ -264,7 +365,7 @@ makeEplot_environment_boot<-function(ode_result, target_sp, predstep=10, tau=1, 
   
   Emat<-matrix(nrow=maxE-1, ncol=3); colnames(Emat)<-c("B", "T", "M")
   
-  for(E in 2:(maxE)) {
+  for(E in 2:maxE) {
     Emat[E-1,"B"]<-SSR_pred_boot(A=Biomass_total, E=E, predstep=predstep, tau=tau)$rho
     Emat[E-1,"T"]<-SSR_pred_boot(A=temperature, E=E, predstep=predstep, tau=tau)$rho
     Emat[E-1,"M"]<-SSR_pred_boot(A=moisture, E=E, predstep=predstep, tau=tau)$rho
@@ -328,7 +429,8 @@ makeEplot_species<-function(ode_result, target_sp_1, target_sp_2, predstep=10, t
 ################################################################
 # CCM environment function
 ################################################################
-doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, ...) {
+doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, iterations=100, twoway=TRUE) {
+  predstep<-predstep
   out<-ode_result[["out"]]
   pars<-ode_result[["pars"]]
   #########################
@@ -362,15 +464,21 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
   E_moist<-min(which(Emat[,3]>=(quantile(Emat[,3], 0.95, na.rm=T)-0.01)))+1
   E_biom<-min(which(Emat[,1]>=(quantile(Emat[,1], 0.95, na.rm=T)-0.01)))+1
   
-  T_cause_B<-CCM_boot(A=temperature, B=Biomass_total, E=E_temp, DesiredL=DesiredL, ...)
-  M_cause_B<-CCM_boot(A=moisture, B=Biomass_total, E=E_moist, DesiredL=DesiredL, ...)
+  T_cause_B<-CCM_boot(A=temperature, B=Biomass_total, E=E_temp, DesiredL=DesiredL, iterations=100)
+  M_cause_B<-CCM_boot(A=moisture, B=Biomass_total, E=E_moist, DesiredL=DesiredL, iterations=100)
   
-  B_cause_T<-CCM_boot(A=Biomass_total, B=temperature, E=E_biom, DesiredL=DesiredL, ...)
-  B_cause_M<-CCM_boot(A=Biomass_total, B=moisture, E=E_biom, DesiredL=DesiredL, ...)
-  
+  if(twoway) {
+    B_cause_T<-CCM_boot(A=Biomass_total, B=temperature, E=E_biom, DesiredL=DesiredL, iterations=100)
+    B_cause_M<-CCM_boot(A=Biomass_total, B=moisture, E=E_biom, DesiredL=DesiredL, iterations=100)
+
   return(list(T_cause_B=T_cause_B, M_cause_B=M_cause_B,
                 B_cause_T=B_cause_T, B_cause_M=B_cause_M, Emat=Emat, Euse=c(E_temp=E_temp, E_moist=E_moist, E_biom=E_biom),
               datalist=list(Biomass_total=Biomass_total, temperature=temperature, moisture=moisture)))
+  } else {
+    return(list(T_cause_B=T_cause_B, M_cause_B=M_cause_B,
+                B_cause_T=NULL, B_cause_M=NULL, Emat=Emat, Euse=c(E_temp=E_temp, E_moist=E_moist, E_biom=E_biom),
+                datalist=list(Biomass_total=Biomass_total, temperature=temperature, moisture=moisture)))
+  }
 }
 
 ################################################################
@@ -436,10 +544,12 @@ ssr_data<-function(ccm_out, predstepmax=10, tau=1) {
 ################################################################
 # Plot ccm
 ################################################################
-plot_ccm<-function(ccm_out, ylimits=c(0, 1)) {
+plot_ccm<-function(ccm_out, ylimits=c(0, 1), twoway=TRUE) {
   #########################
   # Plot CCM
   #########################
+  if(twoway) {
+    
   with(ccm_out, {
   minL<-max(length(T_cause_B$Lobs), length(T_cause_B$rho), length(B_cause_T$rho), length(M_cause_B$rho), length(B_cause_M$rho))
   matplot(T_cause_B$Lobs[1:minL], cbind(T_cause_B$rho[1:minL],T_cause_B$rho[1:minL]+T_cause_B$sdevrho[1:minL],T_cause_B$rho[1:minL]-T_cause_B$sdevrho[1:minL],
@@ -451,7 +561,24 @@ plot_ccm<-function(ccm_out, ylimits=c(0, 1)) {
   legend("topleft", c("Temp. causes Biom.", "Biom. causes Temp.", "Moist. causes Biom.", "Biom. causes Moist."), col=c(1,2,3,4), lty=c(1), lwd=2, bty="n")
   abline(h=0, lty=3, col="darkgrey", lwd=2)
   })
+  
+  } else {
+    with(ccm_out, {
+      minL<-max(length(T_cause_B$Lobs), length(T_cause_B$rho), length(B_cause_T$rho), length(M_cause_B$rho), length(B_cause_M$rho))
+      matplot(T_cause_B$Lobs[1:minL], cbind(T_cause_B$rho[1:minL],T_cause_B$rho[1:minL]+T_cause_B$sdevrho[1:minL],T_cause_B$rho[1:minL]-T_cause_B$sdevrho[1:minL],
+                                            M_cause_B$rho[1:minL],M_cause_B$rho[1:minL]+M_cause_B$sdevrho[1:minL],M_cause_B$rho[1:minL]-M_cause_B$sdevrho[1:minL]),
+              type="l", main="", xlab="Library length", ylab="rho", lwd=2,
+              ylim=ylimits, lty=c(1,3,3,1,3,3,1,3,3), col=c(rep(1, 3), rep(2, 3)))
+      abline(h=0, lty=3, col="darkgrey", lwd=2)
+      par(xpd=TRUE)
+      legend(mean(T_cause_B$Lobs[1:minL], na.rm=T), max(ylimits)+diff(ylimits)/3,
+             c("Temp. causes Biom.", "Moist. causes Biom."), col=c(1,2), lty=c(1), lwd=2, bty="n",
+             xjust=0.5, yjust=0.5)
+      par(xpd=FALSE)
+  })
+  }
 }
+
 
 
 ################################################################
