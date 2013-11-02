@@ -62,25 +62,25 @@ CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), i
   acceptablelib<-which(acceptablelib>0)-1 #Convert into positions in C array
   lengthacceptablelib<-length(acceptablelib)
   
-  #Remove desired libraries that are too long
-  rejectedL<-DesiredL[DesiredL>lengthacceptablelib]
-  DesiredL<-DesiredL[DesiredL<=lengthacceptablelib]
+  DesiredL<-DesiredL+E-2 #Convert to positions in C array
   
+  for(i in 1:length(DesiredL)) { #Load nearby points from acceptablelib vector
+    DesiredL[i]<-acceptablelib[which.min(abs(acceptablelib-DesiredL[i]))] 
+  }
   # Update input to match actual indices
-  DesiredL<-DesiredL+E-2
   A[is.na(A)]<-0; B[is.na(B)]<-0 #Make vectors "C safe"
   
   if(tau*(E+1)>lengthacceptablelib) {
     print(paste("Error - too few records to test E =", E, "and tau =", tau))
     return(out=list(A=A, Aest=NA, B=B, rho=NA, varrho=NA, sdevrho=NA, Lobs=NA, E=out$E, tau=tau, FULLinfo=NA, rejectedL=NA))
   } else {
-  
+    
     out<-.C("CCM_bootstrap", A=as.double(A), Aest=as.double(Aest), B=as.double(B), rho=as.double(rho), E=as.integer(E), tau=as.integer(tau),
-          plength=as.integer(plengtht), pLibLength=as.integer(pLibLength),DesiredL=as.integer(DesiredL), plengthDesL=as.integer(length(DesiredL)),
-          piterations=as.integer(iterations), varrho=as.double(varrho), acceptablelib=as.integer(acceptablelib), plengthacceptablelib=as.integer(lengthacceptablelib))
-  out$Aest[out$Aest==0]<-NA #Mark values that were not calculated  
-  sdevrho<-sqrt(out$varrho[out$rho!=0]) #Calculate standard deviation
-  return(list(A=out$A, Aest=out$Aest, B=out$B, rho=out$rho[out$rho!=0], varrho=out$varrho[out$rho!=0], sdevrho=sdevrho, Lobs=(1:length(A))[out$rho!=0]-E+1, E=out$E, tau=out$tau, FULLinfo=out, rejectedL=rejectedL))
+            plength=as.integer(plengtht), pLibLength=as.integer(pLibLength),DesiredL=as.integer(DesiredL), plengthDesL=as.integer(length(DesiredL)),
+            piterations=as.integer(iterations), varrho=as.double(varrho), acceptablelib=as.integer(acceptablelib), plengthacceptablelib=as.integer(lengthacceptablelib))
+    out$Aest[out$Aest==0]<-NA #Mark values that were not calculated  
+    sdevrho<-sqrt(out$varrho[out$rho!=0]) #Calculate standard deviation
+    return(list(A=out$A, Aest=out$Aest, B=out$B, rho=out$rho[out$rho!=0], varrho=out$varrho[out$rho!=0], sdevrho=sdevrho, Lobs=(1:length(A))[out$rho!=0]-E+1, E=out$E, tau=out$tau, FULLinfo=out))
   }
 }
 
