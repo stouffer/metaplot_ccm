@@ -1,9 +1,9 @@
 #include <R.h>
 #include <Rmath.h>
 void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]);
-void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho, int failediter);
+void getrho(double A[], double Aest[], double rho[], int from, int to, int l, double *varrho, int failediter, int *acceptablelib, int lengthacceptablelib);
 void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int *ptau, int *plengtht, int *pLibLength, int *DesiredL, int *plengthDesL, int *piterations, double *varrho, int *acceptablelib, int *plengthacceptablelib) {
-    int i, j, k, l, from, to, slide, count, slidetrip=0, lindex;
+    int i, j, k, l, from, to, slide, count, lindex;
     double distsv, sumu, sumaest, sumw;
     int E = *pE;
 	int nneigh=E+1;
@@ -32,45 +32,38 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
     for(lindex=0; lindex<lengthDesL; lindex++) { /* try out all desired library sizes, within ((E+1) to LibLengh-tau*(E-1)) */
     failediter=0;
         l=DesiredL[lindex];
-        if(l<(tau*(E-1)+(E+1))) {
-            l=(tau*(E-1)+(E+1));
+        if(l<(from+(E+1))) {
+            l=(from+(E+1));
         } /* Catch values that fall outside of feasible library */
         if(l>=lengtht) {
             l=(lengtht-1);
         } /* Catch values that fall outside of feasible library */
         to=l; // Set "end" of library for each iteration
-        if(slidetrip==0) { // Trigger to end function when we reach the end of the library
-            for(slide=from; slide<iterations; slide++) { // Run a step for each desired iteration
-		if(slidetrip==0) {
+        //fprintf(stderr, "runif = %.1f\n", l);
+
+for(slide=from; slide<iterations; slide++) { // Run desired number of iterations
 			integerpos=floor(runif(0,1)*(lengthacceptablelib));
-      			count=acceptablelib[integerpos]; //Random number generator - populates Count with an entry that has enough of a history for give E.
-			for(j=from; j<=to; j++){ /* create first round of L assignments */
-				// Use "skipvector" to identify regions with holes, and leave them out of the library.
-
-
-				if(count<LibLength) { // If we have not yet "wrapped around" to the beginning of the data
+      count=acceptablelib[integerpos]; //Random number generator - populates Count with an entry that has enough of a history for given E.
+      			
+			for(j=from; j<=to; j++){ //For each desired library length, pull random, "acceptable" elements from library
 					LibUse[j]=count;
-				}else{ // Otherwise, account for "jump" over the end of the library
-					LibUse[j]=count-(LibLength-(tau*(E-1)));
-				} // LibUse is now a vector of positions, based on acceptable starting points (don't "jump" over gaps), including any wrapping around the Library that was required.
-
-				integerpos=floor(runif(0,1)*(lengthacceptablelib));
-      				count=acceptablelib[integerpos]; //Random number generator
-			}
+         	integerpos=floor(runif(0,1)*(lengthacceptablelib));
+      		count=acceptablelib[integerpos]; //Random number generator
+			} // LibUse is now a vector of positions, based on acceptable starting points (have sufficient lags for neighbor and prediction, don't "jump" over gaps)
                     
-                    for(int ii=0; ii<lengthacceptablelib; ii++) { //Predict all points in A using information from the minimized library
+                    for(int ii=0; ii<lengthacceptablelib; ii++) { //Predict all points in A using information from the chosen
                     	i=acceptablelib[ii]; // Make sure we only predict points that have suitable time lag information
                         for(j=from; j<=to; j++) { // scroll across elements in minimized L (based on lengthDesL, including wrapping)
                             distances[LibUse[j]]=0;
                             for(k=0; k<E; k++) {
-                                distances[LibUse[j]]=distances[LibUse[j]]+pow((B[i-tau*k]-B[LibUse[j]-tau*k]),2); //calculate distances between points on shadow manifold for all E lagged dimensions
+                                distances[LibUse[j]]=distances[LibUse[j]]+pow((B[i-tau*k]-B[LibUse[j]-tau*k]),2); //calculate distances between focul point i and all other points j on shadow manifold for all E lagged dimensions
                             }
                             distances[LibUse[j]]=sqrt(distances[LibUse[j]]);
                         }
+                        //distances is now a vector of distances between focul point, and all j other points in simulated library under consideration, and is indexed by LibUse[]
                         
-                        getorder(neighbors, distances, E, from, to, i, LibUse); /*find "tme" position of (E+1) closest points to B[i] on the shadow manifold*/
-                        
-                        distsv=distances[neighbors[0]];
+                        getorder(neighbors, distances, E, from, to, i, LibUse); //find position of (E+1) closest points to B[i] on the shadow manifold. Neighbors correspond to positions in LibUse.                        
+                        distsv=distances[neighbors[0]]; //shortest distance
                         
                         sumaest=0.; /* find w, and weighted Aest variables */
                         if(distsv!=0) { /* check whether minimum distance is zero */
@@ -108,42 +101,34 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
                         }
                         Aest[i]=sumaest; /* calculate Aest */
                     }
-                    getrho(A, Aest, rho, from, to, l, LibLength, varrho, failediter);
-                    if(to==LibLength-1) {
-                        slidetrip=1;
-                    }
-		}
-            }
-        }
-        if(slidetrip==0) {
+                    getrho(A, Aest, rho, from, to, l, varrho, failediter, acceptablelib, lengthacceptablelib);
+            } // End iterations
             rho[l]=rho[l]/(iterations-failediter); // Calcualte mean of rho values
             varrho[l]=varrho[l]/(iterations-failediter); // Calculate mean of rho squared
             varrho[l]=varrho[l]-pow(rho[l], 2); // Calculate variance of rho
-        }
-    }
+    } // End desired libraries
     PutRNGstate(); // Free up state of R random number generator
 }
 
 void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]) {
-    /*find "tme" position of (Ego+1) closest points to B[i] on the shadow manifold*/
-    /* include output only for distancesgo >0 */
+    //find position of (Ego+1) closest points to B[i] on the shadow manifold
     int trip, n, ii, j, k, nneigh;
     nneigh=1;
     n=0;
-    if(LibUse[from]==i) { /* if first element is a self-reference */
-        n=n+1; /* #### scroll across elements in L (including wrapping) #### */
+    if(LibUse[from]==i) { //if first element is a self-reference, increment
+        n=n+1;
     }
 	neighbors[0]=LibUse[from+n];
-    for(ii=(from+n); ii<=to; ii++) { /* #### scroll across elements in L (including wrapping) #### */
+    for(ii=(from+n); ii<=to; ii++) { // scroll across elements in L
         trip=0;
-        for(j=0; j<nneigh; j++) {
-            if((distances[LibUse[ii]]<distances[neighbors[j]])&(LibUse[ii]!=i)) {
-                for(k=(nneigh); k>(j); k--) {
+        for(j=0; j<nneigh; j++) { // move existing neighbors up in vector if a closer neighbor is found
+            if((distances[LibUse[ii]]<distances[neighbors[j]])&&(LibUse[ii]!=i)) { // check whether any distance is smaller than distances[neighbors[]]
+                for(k=(nneigh); k>(j); k--) { // Move all remaining neighbors up a position in the vector
                     if(k<(E+1)) {
                         neighbors[k]=neighbors[k-1];
                     }
                 }
-                neighbors[j]=LibUse[ii];
+                neighbors[j]=LibUse[ii]; // Replace leading element with new closest neighbor
                 if(nneigh<(E+1)) {
                     nneigh=nneigh+1;
                 }
@@ -151,33 +136,37 @@ void getorder(int neighbors[], double distances[], int E, int from, int to, int 
                 break;
             }
         }
-        if((trip==0)&(nneigh<(E+1))&(LibUse[ii]!=i)&(neighbors[nneigh-1]!=LibUse[ii])) { /* Add element if vector is not yet full, but distance is greater than all already recorded */
+        if((trip==0)&&(nneigh<(E+1))&&(LibUse[ii]!=i)&&(neighbors[nneigh-1]!=LibUse[ii])) { // Add element if vector is not yet full, but distance is greater than all already recorded
             neighbors[nneigh]=LibUse[ii];
             if(nneigh<(E+1)) {
-				nneigh=nneigh+1;
+				      nneigh=nneigh+1;
             }
         }
     }
 }
 
-void getrho(double A[], double Aest[], double rho[], int from, int to, int l, int LibLength, double *varrho, int failediter) {
-    /*Calculate Pearson correlation coefficient between A and Aest*/
-    int j, n=0;
+void getrho(double A[], double Aest[], double rho[], int from, int to, int l, double *varrho, int failediter, int *acceptablelib, int lengthacceptablelib) {
+    // Calculate Pearson correlation coefficient between A and Aest
+    int j, jj, n=0;
     double xbar=0, ybar=0, rhocalc=0, xyxybar=0, xxbarsq=0, yybarsq=0;
-    for(j=from; j<LibLength; j++) { /* #### scroll across elements in L (including wrapping) #### */
+
+    for(jj=0; jj<lengthacceptablelib; jj++) { // scroll across elements that were used in acceptable library, and calculate means for A
+        j=acceptablelib[jj];
         xbar=xbar+A[j];
         ybar=ybar+Aest[j];
         n=n+1;
     }
     xbar=xbar/n;
     ybar=ybar/n;
-    for(j=from; j<LibLength; j++) { /* #### scroll across elements in L (including wrapping) #### */
+    
+    for(jj=0; jj<lengthacceptablelib; jj++) { // Calculate mean residuals
+        j=acceptablelib[jj];
         xyxybar=xyxybar+((A[j]-xbar)*(Aest[j]-ybar));
         xxbarsq=xxbarsq+pow(A[j]-xbar,2);
         yybarsq=yybarsq+pow(Aest[j]-ybar,2);
     }
     rhocalc=xyxybar/(sqrt(xxbarsq)*sqrt(yybarsq));
-    if(rhocalc==rhocalc) {
+    if((rhocalc>=-1)&&(rhocalc<=1)) {
       rho[l]=rho[l]+rhocalc;
       varrho[l]=varrho[l]+pow(rhocalc, 2); //Save rho squared, for calculating variance
     } else {
