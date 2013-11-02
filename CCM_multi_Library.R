@@ -47,7 +47,7 @@ program_init_bootstrap<-function() {
 CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), iterations=100) {
   #Note - input must have "NA" between any gaps in the library (e.g., if you are "stacking" plots)
   ## Initialize parameters
-  plengtht=length(A); pLibLength=length(A); Aest=rep(0, length(A)); rho=Aest; varrho=Aest
+  plengtht=length(A[!is.na(A)]); pLibLength=length(A[!is.na(A)]); Aest=rep(0, length(A)); rho=Aest; varrho=Aest
   
   # Check to make sure library is not too long
   if(plengtht>pLibLength) {plengtht=pLibLength}
@@ -60,6 +60,7 @@ CCM_boot<-function(A, B, E, tau=1, DesiredL=((tau*(E-1)+(E+1)):length(A)-E+2), i
     acceptablelib<-acceptablelib*as.numeric(is.finite(c(rep(NA, i),A[-c((lA-i+1):lA)])))
   }
   acceptablelib<-which(acceptablelib>0)-1 #Convert into positions in C array
+  acceptablelib<-acceptablelib[acceptablelib<((plengtht-1)-(tau))]
   lengthacceptablelib<-length(acceptablelib)
   
   DesiredL<-DesiredL+E-2 #Convert to positions in C array
@@ -104,16 +105,16 @@ SSR_pred_boot<-function(A, B=A, E, tau=1, predstep=1, matchSugi=1) {
   if(tau*(E+1+predstep)>lengthacceptablelib) {
     print(paste("Error - too few records to test E =", E, "tau =", tau, "and prestep =", predstep))
     return(out=list(A=A, Aest=NA, B=B, E=E, tau=tau, pBlength=length(B), pAlength=length(A), predstep=predstep,
-      prepvec=repvec, pmatchSugi=matchSugi, acceptablelib=acceptablelib, plengthacceptablelib=lengthacceptablelib, rho=NA))
+                    prepvec=repvec, pmatchSugi=matchSugi, acceptablelib=acceptablelib, plengthacceptablelib=lengthacceptablelib, rho=NA))
   } else { # Don't attempt to run algorithm using more lags than datapoints
-  A[is.na(A)]<-0; B[is.na(B)]<-0 #Make vectors "C safe"  
-  
-  out<-.C("SSR_predict_boot", A=as.double(A), Aest=as.double(rep(0, length(A))), B=as.double(B), E=as.integer(E),
-          tau=as.integer(tau),pBlength=as.integer(length(B)), pAlength=as.integer(length(A)), predstep=as.integer(predstep),
-          prepvec=as.integer(repvec), pmatchSugi=as.integer(matchSugi), acceptablelib=as.integer(acceptablelib), plengthacceptablelib=as.integer(lengthacceptablelib))
-  out$rho<-cor(out$A, out$Aest)
-  out$Aest[out$Aest==0]<-NA
-  return(out)
+    A[is.na(A)]<-0; B[is.na(B)]<-0 #Make vectors "C safe"  
+    
+    out<-.C("SSR_predict_boot", A=as.double(A), Aest=as.double(rep(0, length(A))), B=as.double(B), E=as.integer(E),
+            tau=as.integer(tau),pBlength=as.integer(length(B)), pAlength=as.integer(length(A)), predstep=as.integer(predstep),
+            prepvec=as.integer(repvec), pmatchSugi=as.integer(matchSugi), acceptablelib=as.integer(acceptablelib), plengthacceptablelib=as.integer(lengthacceptablelib))
+    out$rho<-cor(out$A, out$Aest)
+    out$Aest[out$Aest==0]<-NA
+    return(out)
   }
 }
 
@@ -121,24 +122,24 @@ SSR_pred_boot<-function(A, B=A, E, tau=1, predstep=1, matchSugi=1) {
 # Generate time series function, conventional
 ################################################################
 make_comp_data_boot<-function(nspec=12,
-                         a = 1,
-                         w = 1,
-                         K = 10,
-                         m = 0.1,
-                         Q = 2,
-                         r = 1,
-                         S = 100,
-                         x_mean_sd = c(25, 1),
-                         y_mean_sd = c(25, 1),
-                         xstr=0,
-                         B=c(rep(0.01, nspec)),
-                         R=100,
-                         times=seq(1, 100, by = 1),
-                         OUrates=c(0.1, 0.1), #strength of return to mean
-                         Wrates=c(1, 1), #strength of deviation from mean
-                         seednum=1989,
-                         number_of_chains=10 #Number of plots
-                         ) {
+                              a = 1,
+                              w = 1,
+                              K = 10,
+                              m = 0.1,
+                              Q = 2,
+                              r = 1,
+                              S = 100,
+                              x_mean_sd = c(25, 1),
+                              y_mean_sd = c(25, 1),
+                              xstr=0,
+                              B=c(rep(0.01, nspec)),
+                              R=100,
+                              times=seq(1, 100, by = 1),
+                              OUrates=c(0.1, 0.1), #strength of return to mean
+                              Wrates=c(1, 1), #strength of deviation from mean
+                              seednum=1989,
+                              number_of_chains=10 #Number of plots
+) {
   
   #########################
   # Load diffeq function
@@ -157,7 +158,7 @@ make_comp_data_boot<-function(nspec=12,
   
   require(deSolve) # load differentail equation solver package
   if(seednum) {
-  set.seed(seednum)
+    set.seed(seednum)
   }
   
   Bmod <- function(Time, State, Pars) {
@@ -183,7 +184,7 @@ make_comp_data_boot<-function(nspec=12,
   
   xmid<-x_mean_sd[1]
   ymid<-y_mean_sd[1]
-    
+  
   xlist[1]<-runif(1, min=max(x_mean_sd[1]-2*x_mean_sd[2],0), max=x_mean_sd[1]+2*x_mean_sd[2])
   ylist[1]<-runif(1, min=max(y_mean_sd[1]-2*y_mean_sd[2],0), max=y_mean_sd[2]+2*y_mean_sd[2])
   Wxlist<-rnorm(max(times), 0, Wrates[1]) #White noise for x
@@ -191,7 +192,7 @@ make_comp_data_boot<-function(nspec=12,
   for(i in 2:max(times)) {
     xlist[i]<-xlist[i-1]+(xmid-xlist[i-1])*OUrates[1]+Wxlist[i-1]
     ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
-  
+    
   } #Check out speed of response (Smapping - which work, which don't? Fully stochastic vs. some signal)
   
   #########################
@@ -210,8 +211,8 @@ make_comp_data_boot<-function(nspec=12,
   for(plotiter in 1:number_of_chains) {
     Biter<-B*sample(c(1,0), length(B), rep=T)
     yini<-c(R, Biter)
-  
-  
+    
+    
     out_tmp   <- ode(yini, times, Bmod, pars)
     out<-rbind(out, as.matrix(out_tmp), NA)
   }
@@ -345,7 +346,7 @@ plot_output_boot<-function(ode_result) {
   for(i in pars$yopt) {
     lines(dlist, pars$r*exp(-0.5*((abs(i-dlist))/pars$w)^2))
   }
-d}
+}
 
 ################################################################
 # Make E plot
@@ -382,12 +383,6 @@ makeEplot_environment_boot<-function(ode_result, target_sp, predstep=10, tau=1, 
   return(list(Emat=Emat, Euse=c(E_temp=E_temp, E_moist=E_moist, E_biom=E_biom)))
 }
 
-
-
-
-
-
-##################
 
 
 
@@ -436,7 +431,7 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
   #########################
   # Run CCM
   #########################
-    
+  
   if(target_sp=="all") {
     Biomass_total<-rowSums(out[ , -c(1,2)])
   } else {
@@ -444,9 +439,6 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
   }
   temperature<-pars$xlist
   moisture<-pars$ylist
-    
-  DesiredL<-unique(round(c(seq(10, median(pars$times), length=20), seq(median(pars$times), max(pars$times)-10, length=10))),0)
-  if(max(DesiredL)>length(Biomass_total)) {DesiredL<-1:length(Biomass_total)}
   
   Emat<-matrix(nrow=maxE-1, ncol=3); colnames(Emat)<-c("B", "T", "M")
   
@@ -460,20 +452,31 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
           main=paste("pred. step = ", predstep, "; tau = ", tau, sep=""))
   legend("bottomleft", c("Biomass", "Temperature", "Moisture"), lty=1:3, col=1:3, lwd=2, bty="n")
   
+  ## Add on T and M libraries
+  reptimes<-length(Biomass_total)/(length(temperature)+1)
+  temperature<-rep(c(temperature, NA), reptimes)
+  moisture<-rep(c(moisture, NA), reptimes)
+  
   E_temp<-min(which(Emat[,2]>=(quantile(Emat[,2], 0.95, na.rm=T)-0.01)))+1
   E_moist<-min(which(Emat[,3]>=(quantile(Emat[,3], 0.95, na.rm=T)-0.01)))+1
   E_biom<-min(which(Emat[,1]>=(quantile(Emat[,1], 0.95, na.rm=T)-0.01)))+1
   
-  T_cause_B<-CCM_boot(A=temperature, B=Biomass_total, E=E_temp, DesiredL=DesiredL, iterations=100)
-  M_cause_B<-CCM_boot(A=moisture, B=Biomass_total, E=E_moist, DesiredL=DesiredL, iterations=100)
+  
+  maxE_use<-max(E_temp, E_moist, E_biom)
+  DesiredL<-sort(unique(c(floor(seq((maxE_use)*tau, length(temperature)/4, length=10)),
+                          floor(seq(length(temperature)/4, length(temperature)-tau, length=11)))))
+  
+  T_cause_B<-CCM_boot(A=temperature, B=Biomass_total, E=E_temp, DesiredL=DesiredL, iterations=iterations)
+  M_cause_B<-CCM_boot(A=moisture, B=Biomass_total, E=E_moist, DesiredL=DesiredL, iterations=iterations)
+  
   
   if(twoway) {
-    B_cause_T<-CCM_boot(A=Biomass_total, B=temperature, E=E_biom, DesiredL=DesiredL, iterations=100)
-    B_cause_M<-CCM_boot(A=Biomass_total, B=moisture, E=E_biom, DesiredL=DesiredL, iterations=100)
-
-  return(list(T_cause_B=T_cause_B, M_cause_B=M_cause_B,
+    B_cause_T<-CCM_boot(A=Biomass_total, B=temperature, E=E_biom, DesiredL=DesiredL, iterations=iterations)
+    B_cause_M<-CCM_boot(A=Biomass_total, B=moisture, E=E_biom, DesiredL=DesiredL, iterations=iterations)
+    
+    return(list(T_cause_B=T_cause_B, M_cause_B=M_cause_B,
                 B_cause_T=B_cause_T, B_cause_M=B_cause_M, Emat=Emat, Euse=c(E_temp=E_temp, E_moist=E_moist, E_biom=E_biom),
-              datalist=list(Biomass_total=Biomass_total, temperature=temperature, moisture=moisture)))
+                datalist=list(Biomass_total=Biomass_total, temperature=temperature, moisture=moisture)))
   } else {
     return(list(T_cause_B=T_cause_B, M_cause_B=M_cause_B,
                 B_cause_T=NULL, B_cause_M=NULL, Emat=Emat, Euse=c(E_temp=E_temp, E_moist=E_moist, E_biom=E_biom),
@@ -493,7 +496,7 @@ doCCM_species<-function(ode_result, target_sp_1, target_sp_2, predstep=10, tau=1
   
   Biomass_total_1<-out[ , target_sp_1+2]
   Biomass_total_2<-out[ , target_sp_2+2]
-
+  
   DesiredL<-unique(round(c(seq(10, median(pars$times), length=20), seq(median(pars$times), max(pars$times)-10, length=10))),0)
   if(max(DesiredL)>length(Biomass_total)) {DesiredL<-1:length(Biomass_total)}
   
@@ -550,18 +553,18 @@ plot_ccm<-function(ccm_out, ylimits=c(0, 1), twoway=TRUE) {
   #########################
   if(twoway) {
     
-  with(ccm_out, {
-  minL<-max(length(T_cause_B$Lobs), length(T_cause_B$rho), length(B_cause_T$rho), length(M_cause_B$rho), length(B_cause_M$rho))
-  matplot(T_cause_B$Lobs[1:minL], cbind(T_cause_B$rho[1:minL],T_cause_B$rho[1:minL]+T_cause_B$sdevrho[1:minL],T_cause_B$rho[1:minL]-T_cause_B$sdevrho[1:minL],
-                                        B_cause_T$rho[1:minL],B_cause_T$rho[1:minL]+B_cause_T$sdevrho[1:minL],B_cause_T$rho[1:minL]-B_cause_T$sdevrho[1:minL],
-                                        M_cause_B$rho[1:minL],M_cause_B$rho[1:minL]+M_cause_B$sdevrho[1:minL],M_cause_B$rho[1:minL]-M_cause_B$sdevrho[1:minL],
-                                        B_cause_M$rho[1:minL],B_cause_M$rho[1:minL]+B_cause_M$sdevrho[1:minL],B_cause_M$rho[1:minL]-B_cause_M$sdevrho[1:minL]),
-          type="l", main="CCM results", xlab="Library length", ylab="rho", lwd=2,
-          ylim=ylimits, lty=c(1,3,3,1,3,3,1,3,3,1,3,3), col=c(rep(1, 3), rep(2, 3), rep(3, 3), rep(4, 3)))
-  legend("topleft", c("Temp. causes Biom.", "Biom. causes Temp.", "Moist. causes Biom.", "Biom. causes Moist."), col=c(1,2,3,4), lty=c(1), lwd=2, bty="n")
-  abline(h=0, lty=3, col="darkgrey", lwd=2)
-  })
-  
+    with(ccm_out, {
+      minL<-max(length(T_cause_B$Lobs), length(T_cause_B$rho), length(B_cause_T$rho), length(M_cause_B$rho), length(B_cause_M$rho))
+      matplot(T_cause_B$Lobs[1:minL], cbind(T_cause_B$rho[1:minL],T_cause_B$rho[1:minL]+T_cause_B$sdevrho[1:minL],T_cause_B$rho[1:minL]-T_cause_B$sdevrho[1:minL],
+                                            B_cause_T$rho[1:minL],B_cause_T$rho[1:minL]+B_cause_T$sdevrho[1:minL],B_cause_T$rho[1:minL]-B_cause_T$sdevrho[1:minL],
+                                            M_cause_B$rho[1:minL],M_cause_B$rho[1:minL]+M_cause_B$sdevrho[1:minL],M_cause_B$rho[1:minL]-M_cause_B$sdevrho[1:minL],
+                                            B_cause_M$rho[1:minL],B_cause_M$rho[1:minL]+B_cause_M$sdevrho[1:minL],B_cause_M$rho[1:minL]-B_cause_M$sdevrho[1:minL]),
+              type="l", main="CCM results", xlab="Library length", ylab="rho", lwd=2,
+              ylim=ylimits, lty=c(1,3,3,1,3,3,1,3,3,1,3,3), col=c(rep(1, 3), rep(2, 3), rep(3, 3), rep(4, 3)))
+      legend("topleft", c("Temp. causes Biom.", "Biom. causes Temp.", "Moist. causes Biom.", "Biom. causes Moist."), col=c(1,2,3,4), lty=c(1), lwd=2, bty="n")
+      abline(h=0, lty=3, col="darkgrey", lwd=2)
+    })
+    
   } else {
     with(ccm_out, {
       minL<-max(length(T_cause_B$Lobs), length(T_cause_B$rho), length(B_cause_T$rho), length(M_cause_B$rho), length(B_cause_M$rho))
@@ -575,7 +578,7 @@ plot_ccm<-function(ccm_out, ylimits=c(0, 1), twoway=TRUE) {
              c("Temp. causes Biom.", "Moist. causes Biom."), col=c(1,2), lty=c(1), lwd=2, bty="n",
              xjust=0.5, yjust=0.5)
       par(xpd=FALSE)
-  })
+    })
   }
 }
 
@@ -632,7 +635,6 @@ odeout_average<-function(ode_result, env_avg=100) {
   
   return(ode_result)
 }
-
 
 
 
