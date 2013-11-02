@@ -1,19 +1,19 @@
 setwd("~/Dropbox/Active Work/Sugihara/Metacommunity_CCM/")
 source("CCM_multi_Library.R")
-source("CCM_multi_Library_test.R")
 
 
 system.time({
-#Initialize and make data
-program_init_bootstrap()
-ode_result<-make_comp_data_boot_Cfxn(seednum=1000, xstr=1,  times=seq(1, 100, by = 1), number_of_chains=1)
-plot_output_boot(ode_result)
-
-#Compare species to environment
-eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=1, maxE=5)
-ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=5, iterations=100, twoway=FALSE)
-ssr_out<-ssr_data(ccm_out, predstepmax=10, tau=1)
-plot_ccm(ccm_out,  ylimits=c(-0.2, 0.5), twoway=FALSE)
+  #Initialize and make data
+  program_init_bootstrap()
+  ode_result<-make_comp_data_boot_Cfxn(seednum=123, xstr=0,  times=seq(1, 100, by = 1), number_of_chains=5)
+  plot_output_boot(ode_result)
+  
+  #Compare species to environment
+  eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=1, maxE=5)
+  
+  ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=5, iterations=100, twoway=FALSE)
+  ssr_out<-ssr_data(ccm_out, predstepmax=10, tau=1)
+  plot_ccm(ccm_out,  ylimits=c(-0.2, 1), twoway=FALSE)
 })
 
 ####
@@ -37,4 +37,3 @@ eplot_out<-makeEplot_environment(ode_agg, "all", tau=1, predstep=1, maxE=5)
 ccm_out<-doCCM_environment(ode_agg, "all", tau=1, predstep=1, maxE=5)
 ssr_out<-ssr_data(ccm_out, predstepmax=5, tau=1)
 plot_ccm(ccm_out,  ylimits=c(-0.2, 1))
-
