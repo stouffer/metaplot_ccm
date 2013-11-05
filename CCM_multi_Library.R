@@ -40,6 +40,25 @@ program_init_bootstrap<-function() {
   dyn.load(paste(file3,".so",sep=""))
 }
 
+
+program_init_bootstrap_short<-function() {
+  #########################
+  # Load CCM function
+  #########################
+  file="CCM_bootstrap"
+  if(is.loaded(file)) {dyn.unload(paste(file,".so",sep=""))}
+  dyn.load(paste(file,".so",sep=""))
+  
+  file2="SSR_predict_boot"
+  if(is.loaded(file2)) {dyn.unload(paste(file2,".so",sep=""))}
+  dyn.load(paste(file2,".so",sep=""))
+  
+  file3="bmod"
+  if(is.loaded(file3)) {dyn.unload(paste(file3,".so",sep=""))}
+  dyn.load(paste(file3,".so",sep=""))
+}
+
+
 ################################################################
 # Run bootstrap CCM
 ################################################################
@@ -285,9 +304,9 @@ make_comp_data_boot_Cfxn<-function(a = 1,
     yini<-c(R, Biter)
     out_tmp   <- ode(y=yini, times=times, func="derivs",
                      parms=parms, dllname="bmod", initforc="forcc",
-                     forcings=forcings, initfun="parmsc", nout=14,
-                     outnames=NULL, jacfun="jac", 
-                     method="ode23")
+                     forcings=forcings, initfun="parmsc", nout=14)#,
+                     #outnames=NULL, jacfun="jac"), 
+                     #method="ode23")
     
     #plot(out_tmp[,1], out_tmp[,2], type="l", ylab="R", xlab="time")
     #matplot(out_tmp[,1], out_tmp[,3:(3+12)], type="l", ylab="Sp", xlab="time")
@@ -424,7 +443,7 @@ makeEplot_species<-function(ode_result, target_sp_1, target_sp_2, predstep=10, t
 ################################################################
 # CCM environment function
 ################################################################
-doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, iterations=100, twoway=TRUE) {
+doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, iterations=100, twoway=TRUE, make_plot=TRUE) {
   predstep<-predstep
   out<-ode_result[["out"]]
   pars<-ode_result[["pars"]]
@@ -447,10 +466,12 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
     Emat[E-1,"T"]<-SSR_pred_boot(A=temperature, E=E, predstep=predstep, tau=tau)$rho
     Emat[E-1,"M"]<-SSR_pred_boot(A=moisture, E=E, predstep=predstep, tau=tau)$rho
   }
+  if(make_plot) {
   matplot(2:maxE, Emat, type="l", col=1:3, lty=1:3,
           xlab="E", ylab="rho", lwd=2,
           main=paste("pred. step = ", predstep, "; tau = ", tau, sep=""))
   legend("bottomleft", c("Biomass", "Temperature", "Moisture"), lty=1:3, col=1:3, lwd=2, bty="n")
+  }
   
   ## Add on T and M libraries
   reptimes<-length(Biomass_total)/(length(temperature)+1)
@@ -635,6 +656,37 @@ odeout_average<-function(ode_result, env_avg=100) {
   
   return(ode_result)
 }
+
+
+
+################################################################
+# Test CCM_out
+################################################################
+testccm<-function(ccm_out) {
+  lng_T<-length(ccm_out$T_cause_B$rho)
+  
+  lng_M<-length(ccm_out$M_cause_B$rho)
+  
+  #Test for increasing function, by estimating magnitudes of second derivative
+  T_curve<-summary(lm(diff(diff(ccm_out$T_cause_B$rho))~ccm_out$T_cause_B$Lobs[c(-1, -lng_T)]))$coefficients[cbind(c(1,1), c(1,4))]
+  M_curve<-summary(lm(diff(diff(ccm_out$M_cause_B$rho))~ccm_out$M_cause_B$Lobs[c(-1, -lng_M)]))$coefficients[cbind(c(1,1), c(1,4))]
+  
+  
+  #Test whether final rho is significantly different from zero
+  T_rho<-c(ccm_out$T_cause_B$rho[lng_T], pnorm(0, ccm_out$T_cause_B$rho[lng_T], ccm_out$T_cause_B$sdevrho[lng_T]))
+  M_rho<-c(ccm_out$M_cause_B$rho[lng_M], pnorm(0, ccm_out$M_cause_B$rho[lng_M], ccm_out$M_cause_B$sdevrho[lng_M]))
+
+  T_cause<-(T_curve[1]<0)&&(T_curve[2]<0.05)&&(T_rho[1]>0)&&(T_rho[2]<0.05)
+  M_cause<-(M_curve[1]<0)&&(M_curve[2]<0.05)&&(M_rho[1]>0)&&(M_rho[2]<0.05)
+    
+  T_test<-c(T_curve, T_rho, T_cause)
+    names(T_test)<-c("diff", "pdiff", "rho", "prho", "cause")
+  M_test<-c(M_curve, M_rho, M_cause)
+  names(M_test)<-c("diff", "pdiff", "rho", "prho", "cause")
+  
+  return(list(T_test=T_test, M_test=M_test))
+}
+
 
 
 
