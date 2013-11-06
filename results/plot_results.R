@@ -1,5 +1,5 @@
 setwd("~/Dropbox/Active Work/Sugihara/Metacommunity_CCM/results/")
-dat<-read.csv("datout.csv")
+dat<-read.csv("datout2.csv")
 
 head(dat)
 
@@ -50,3 +50,4 @@ plotdat<-t(matrix(nrow=3, data=unlist(tapply(dat$Mcause, sd_levels, function(x) 
 segments(sdseq+0.01, plotdat[,2], sdseq+0.01, plotdat[,3], col=2)
 par(xpd=TRUE)
 legend(0.1, 1.6, c("T", "M"), lty=1, col=c(1,2), lwd=2)
+
