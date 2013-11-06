@@ -297,7 +297,9 @@ make_comp_data_boot_Cfxn<-function(a = 1,
   
   out<-NULL
   for(plotiter in 1:number_of_chains) {
-    Biter<-B*sample(c(1,0), length(B), rep=T)
+    #Biter<-B*sample(c(1,0), length(B), rep=T)
+    Biter<-runif(length(B), 1, 100)
+    Biter<-rlognorm
     parms<-pars
     parms[which(Biter==0)+14]<-0
     
@@ -666,10 +668,16 @@ testccm<-function(ccm_out) {
   lng_T<-length(ccm_out$T_cause_B$rho)
   
   lng_M<-length(ccm_out$M_cause_B$rho)
+
+  
   
   #Test for increasing function, by estimating magnitudes of second derivative
-  T_curve<-summary(lm(diff(diff(ccm_out$T_cause_B$rho))~ccm_out$T_cause_B$Lobs[c(-1, -lng_T)]))$coefficients[cbind(c(1,1), c(1,4))]
-  M_curve<-summary(lm(diff(diff(ccm_out$M_cause_B$rho))~ccm_out$M_cause_B$Lobs[c(-1, -lng_M)]))$coefficients[cbind(c(1,1), c(1,4))]
+  diff_T<-diff(diff(ccm_out$T_cause_B$rho)/diff(ccm_out$T_cause_B$Lobs))/diff(ccm_out$T_cause_B$Lobs)[-c(1, lng_T)]
+  diff_M<-diff(diff(ccm_out$M_cause_B$rho)/diff(ccm_out$M_cause_B$Lobs))/diff(ccm_out$M_cause_B$Lobs)[-c(1, lng_M)]
+
+  
+  T_curve<-summary(lm(diff_T~ccm_out$T_cause_B$Lobs[c(-1, -lng_T)]))$coefficients[cbind(c(1,1), c(1,4))]
+  M_curve<-summary(lm(diff_M~ccm_out$M_cause_B$Lobs[c(-1, -lng_M)]))$coefficients[cbind(c(1,1), c(1,4))]
   
   
   #Test whether final rho is significantly different from zero
@@ -688,6 +696,6 @@ testccm<-function(ccm_out) {
 }
 
 
-
+#Try this out? http://www.r-bloggers.com/a-better-nls/
 
 
