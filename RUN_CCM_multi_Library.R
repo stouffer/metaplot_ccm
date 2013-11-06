@@ -1,11 +1,29 @@
 setwd("~/Dropbox/Active Work/Sugihara/Metacommunity_CCM/")
 source("CCM_multi_Library.R")
 
+#Solutions to 
+#library.dynam.unload("deSolve", libpath="/home/atclark/R//x86_64-pc-linux-gnu-library/3.0//deSolve")
+#library.dynam.unload("deSolve", libpath=paste(.libPaths()[1], "//deSolve", sep=""))
+#library.dynam("deSolve", package="deSolve", lib.loc=.libPaths()[1])
+
+program_init_bootstrap()
 
 system.time({
   #Initialize and make data
   program_init_bootstrap_short()
-  ode_result<-make_comp_data_boot_Cfxn(seednum=123, xstr=0,  times=seq(1, 100, by = 1), number_of_chains=5)
+  
+  ode_result<-NULL
+  
+  while(length(ode_result)==0) { #catch strange deSolve error
+    try({
+      ode_result<-make_comp_data_boot_Cfxn(seednum=FALSE, xstr=0.9,  times=seq(1, 100, by = 1), number_of_chains=5)
+    })
+    
+    library.dynam.unload("deSolve", libpath=paste(.libPaths()[1], "//deSolve", sep=""))
+    library.dynam("deSolve", package="deSolve", lib.loc=.libPaths()[1])    
+  }
+  
+  
   plot_output_boot(ode_result)
   
   #Compare species to environment
@@ -35,17 +53,15 @@ dat_out<-foreach(z_iter_counter=1:iter_max, .combine=rbind) %dopar% {
   #Initialize and make data
     xstr<-runif(1, 0, 1)
   
-    ode_result<-FALSE
+  ode_result<-NULL
     
-  while(length(ode_result)<2) { #catch strange deSolve error
+  while(length(ode_result)==0) { #catch strange deSolve error
   try({
       ode_result<-make_comp_data_boot_Cfxn(seednum=FALSE, xstr=xstr,  times=seq(1, 100, by = 1), number_of_chains=5)
     })
   
-  if(length(ode_result)==1) {
-    detach("package:deSolve", unload=TRUE)
-    require(deSolve)
-  }
+  library.dynam.unload("deSolve", libpath=paste(.libPaths()[1], "//deSolve", sep=""))
+  library.dynam("deSolve", package="deSolve", lib.loc=.libPaths()[1])    
   }
   
   #plot_output_boot(ode_result)
