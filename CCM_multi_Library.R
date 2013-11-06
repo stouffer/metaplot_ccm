@@ -22,7 +22,7 @@ program_init_bootstrap<-function() {
   # Load CCM function
   #########################
   file="CCM_bootstrap"
-  if(is.loaded(file)) {dyn.unload(paste(file,".so",sep=""))}
+  #if(is.loaded(file)) {dyn.unload(paste(file,".so",sep=""))}
   if(sum(grep(".so", dir()))>0) {
     system("rm *.so"); system("rm *.o")
   }
@@ -30,12 +30,12 @@ program_init_bootstrap<-function() {
   dyn.load(paste(file,".so",sep=""))
   
   file2="SSR_predict_boot"
-  if(is.loaded(file2)) {dyn.unload(paste(file2,".so",sep=""))}
+  #if(is.loaded(file2)) {dyn.unload(paste(file2,".so",sep=""))}
   system(paste("R CMD SHLIB ",file2,".c",sep=""))
   dyn.load(paste(file2,".so",sep=""))
   
   file3="bmod"
-  if(is.loaded(file3)) {dyn.unload(paste(file3,".so",sep=""))}
+  #if(is.loaded(file3)) {dyn.unload(paste(file3,".so",sep=""))}
   system(paste("R CMD SHLIB ",file3,".c",sep=""))
   dyn.load(paste(file3,".so",sep=""))
 }
@@ -297,18 +297,25 @@ make_comp_data_boot_Cfxn<-function(a = 1,
   
   out<-NULL
   for(plotiter in 1:number_of_chains) {
-    #Biter<-B*sample(c(1,0), length(B), rep=T)
+    ylist[1]<-runif(1, min=max(y_mean_sd[1]-2*y_mean_sd[2],0), max=y_mean_sd[1]+2*y_mean_sd[2])
+    Wylist<-rnorm(max(times), 0, Wrates[2]) #White noise for y
+    for(i in 2:max(times)) {
+      ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
+    }
+    
+    
+    Biter<-B*sample(c(1,0), length(B), rep=T)
     Biter<-runif(length(B), 1, 100)
-    Biter<-rlognorm
+    #Biter<-c(runif(1, 1, 100), rep(0, length(B)-1))
     parms<-pars
     parms[which(Biter==0)+14]<-0
     
     yini<-c(R, Biter)
     out_tmp   <- ode(y=yini, times=times, func="derivs",
                      parms=parms, dllname="bmod", initforc="forcc",
-                     forcings=forcings, initfun="parmsc", nout=14)#,
-                     #outnames=NULL, jacfun="jac"), 
-                     #method="ode23")
+                     forcings=forcings, initfun="parmsc", nout=14,
+                     outnames=NULL, jacfun="jac", 
+                     method="ode23")
     
     #plot(out_tmp[,1], out_tmp[,2], type="l", ylab="R", xlab="time")
     #matplot(out_tmp[,1], out_tmp[,3:(3+12)], type="l", ylab="Sp", xlab="time")
