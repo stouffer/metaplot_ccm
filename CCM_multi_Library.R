@@ -21,8 +21,10 @@ program_init_bootstrap<-function() {
   #########################
   # Load CCM function
   #########################
+  require(deSolve)
+  
   file="CCM_bootstrap"
-  #if(is.loaded(file)) {dyn.unload(paste(file,".so",sep=""))}
+  if(is.loaded(file)) {dyn.unload(paste(file,".so",sep=""))}
   if(sum(grep(".so", dir()))>0) {
     system("rm *.so"); system("rm *.o")
   }
@@ -30,12 +32,12 @@ program_init_bootstrap<-function() {
   dyn.load(paste(file,".so",sep=""))
   
   file2="SSR_predict_boot"
-  #if(is.loaded(file2)) {dyn.unload(paste(file2,".so",sep=""))}
+  if(is.loaded(file2)) {dyn.unload(paste(file2,".so",sep=""))}
   system(paste("R CMD SHLIB ",file2,".c",sep=""))
   dyn.load(paste(file2,".so",sep=""))
   
   file3="bmod"
-  #if(is.loaded(file3)) {dyn.unload(paste(file3,".so",sep=""))}
+  if(is.loaded(file3)) {dyn.unload(paste(file3,".so",sep=""))}
   system(paste("R CMD SHLIB ",file3,".c",sep=""))
   dyn.load(paste(file3,".so",sep=""))
 }
@@ -45,17 +47,22 @@ program_init_bootstrap_short<-function() {
   #########################
   # Load CCM function
   #########################
+  require(deSolve)
+  
   file="CCM_bootstrap"
-  if(is.loaded(file)) {dyn.unload(paste(file,".so",sep=""))}
-  dyn.load(paste(file,".so",sep=""))
+  if(!is.loaded(file)) {
+    dyn.load(paste(file,".so",sep=""))
+  }
   
   file2="SSR_predict_boot"
-  if(is.loaded(file2)) {dyn.unload(paste(file2,".so",sep=""))}
-  dyn.load(paste(file2,".so",sep=""))
+  if(!is.loaded(file2)) {
+    dyn.load(paste(file2,".so",sep=""))
+  }
   
   file3="bmod"
-  if(is.loaded(file3)) {dyn.unload(paste(file3,".so",sep=""))}
-  dyn.load(paste(file3,".so",sep=""))
+  if(!is.loaded(file3)) {
+    dyn.load(paste(file3,".so",sep=""))
+  }
 }
 
 
@@ -258,7 +265,8 @@ make_comp_data_boot_Cfxn<-function(a = 1,
                                    OUrates=c(0.1, 0.1), #strength of return to mean
                                    Wrates=c(1, 1), #strength of deviation from mean
                                    seednum=1989,
-                                   number_of_chains=10 #Number of plots
+                                   number_of_chains=10, #Number of plots
+                                   pval_lose=1 #pr. that species is not chosen to be in plots
 ) {
   nspec=12 # must have 12 species
   
@@ -278,7 +286,7 @@ make_comp_data_boot_Cfxn<-function(a = 1,
   
   pars=c(OUrates[1], OUrates[2], Wrates[1],Wrates[2],x_mean_sd[1],  y_mean_sd[1],xstr,  Q,  r,  S,  a,  m,  K,  w,  xopt, yopt)
   
-  xlist<- numeric(max(times))
+  xlist<- numeric(max(times)-min(times)+1)
   ylist<- numeric(max(times))
   xmid<-x_mean_sd[1]
   ymid<-y_mean_sd[1]
@@ -288,24 +296,27 @@ make_comp_data_boot_Cfxn<-function(a = 1,
   Wxlist<-rnorm(max(times), 0, Wrates[1]) #White noise for x
   Wylist<-rnorm(max(times), 0, Wrates[2]) #White noise for y
   for(i in 2:max(times)) {
-    xlist[i]<-xlist[i-1]+(xmid-xlist[i-1])*OUrates[1]+Wxlist[i-1]
-    ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
+    #xlist[i]<-xlist[i-1]+(xmid-xlist[i-1])*OUrates[1]+Wxlist[i-1]
+    #ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
+    
+    xlist[i]<-xlist[i-1]*(1+OUrates[1]*(1-xlist[i-1]/xmid))+Wxlist[i-1]
+    ylist[i]<-ylist[i-1]*exp(OUrates[2]*(1-ylist[i-1]/ymid))+Wylist[i-1]
   } #Check out speed of response (Smapping - which work, which don't? Fully stochastic vs. some signal)
   
-  forcings <- list(x=cbind(times,xlist), y=cbind(times,ylist))
+  forcings <- list(x=cbind(times,xlist[(1:max(times))%in%times]), y=cbind(times,ylist[(1:max(times))%in%times]))
   #matplot(times, cbind(xlist, ylist), type="s", ylab="Climvar")
   
   out<-NULL
   for(plotiter in 1:number_of_chains) {
-    ylist[1]<-runif(1, min=max(y_mean_sd[1]-2*y_mean_sd[2],0), max=y_mean_sd[1]+2*y_mean_sd[2])
-    Wylist<-rnorm(max(times), 0, Wrates[2]) #White noise for y
-    for(i in 2:max(times)) {
-      ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
-    }
+    #ylist[1]<-runif(1, min=max(y_mean_sd[1]-2*y_mean_sd[2],0), max=y_mean_sd[1]+2*y_mean_sd[2])
+    #Wylist<-rnorm(max(times), 0, Wrates[2]) #White noise for y
+    #for(i in 2:max(times)) {
+    #  ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
+    #}
     
-    
-    Biter<-B*sample(c(1,0), length(B), rep=T)
-    Biter<-runif(length(B), 1, 100)
+    Biter<-sample(c(0,1), length(B), prob=c(pval_lose, 1-pval_lose), rep=T)
+    #Biter<-B*sample(c(1,0), length(B), rep=T)
+    #Biter<-runif(length(B), 1, 100)
     #Biter<-c(runif(1, 1, 100), rep(0, length(B)-1))
     parms<-pars
     parms[which(Biter==0)+14]<-0
@@ -358,9 +369,9 @@ plot_output_boot<-function(ode_result) {
   plot(out[ , 1], rowSums(out[ , -c(1,2)]), type = "l", xlab = "time", ylab = "B",
        main = "Bmod", lwd = 2)
   
-  timelist<-1:(min(which(is.na(out[,1])))-1)
-  plot(out[timelist,1], pars$xlist, type="s", xlab="time", ylab="x")
-  plot(out[timelist,1], pars$ylist, type="s", xlab="time", ylab="y")
+  timelist<-1:length(pars$xlist)
+  plot(timelist, pars$xlist, type="s", xlab="time position", ylab="x")
+  plot(timelist, pars$ylist, type="s", xlab="time position", ylab="y")
   
   #Plot niche space
   plot(range(pars$xopt), c(0,1), xlab="x", ylab="f", type="n", main="x niche space")
@@ -452,7 +463,8 @@ makeEplot_species<-function(ode_result, target_sp_1, target_sp_2, predstep=10, t
 ################################################################
 # CCM environment function
 ################################################################
-doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, iterations=100, twoway=TRUE, make_plot=TRUE) {
+#predstep<-1; tau<-1; make_plot<-TRUE; twoway<-FALSE; iterations<-100; maxE<-3; doscale=TRUE; target_sp<-"all"
+doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, iterations=100, twoway=TRUE, make_plot=TRUE, doscale=TRUE) {
   predstep<-predstep
   out<-ode_result[["out"]]
   pars<-ode_result[["pars"]]
@@ -467,6 +479,12 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
   }
   temperature<-pars$xlist
   moisture<-pars$ylist
+  
+  if(doscale==TRUE) {
+    Biomass_total<-scale(Biomass_total)
+    temperature<-scale(temperature)
+    moisture<-scale(moisture)
+  }
   
   Emat<-matrix(nrow=maxE-1, ncol=3); colnames(Emat)<-c("B", "T", "M")
   
@@ -483,7 +501,7 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
   }
   
   ## Add on T and M libraries
-  reptimes<-length(Biomass_total)/(length(temperature)+1)
+  reptimes<-length(Biomass_total)/(length(pars$times)+1)
   temperature<-rep(c(temperature, NA), reptimes)
   moisture<-rep(c(moisture, NA), reptimes)
   
@@ -687,9 +705,12 @@ testccm<-function(ccm_out) {
   M_curve<-summary(lm(diff_M~ccm_out$M_cause_B$Lobs[c(-1, -lng_M)]))$coefficients[cbind(c(1,1), c(1,4))]
   
   
+  maxsd_T<-max(which(is.finite(ccm_out$T_cause_B$sdevrho)))
+  maxsd_M<-max(which(is.finite(ccm_out$M_cause_B$sdevrho)))
+  
   #Test whether final rho is significantly different from zero
-  T_rho<-c(ccm_out$T_cause_B$rho[lng_T], pnorm(0, ccm_out$T_cause_B$rho[lng_T], ccm_out$T_cause_B$sdevrho[lng_T]))
-  M_rho<-c(ccm_out$M_cause_B$rho[lng_M], pnorm(0, ccm_out$M_cause_B$rho[lng_M], ccm_out$M_cause_B$sdevrho[lng_M]))
+  T_rho<-c(ccm_out$T_cause_B$rho[maxsd_T], pnorm(0, ccm_out$T_cause_B$rho[maxsd_T], ccm_out$T_cause_B$sdevrho[maxsd_T]))
+  M_rho<-c(ccm_out$M_cause_B$rho[maxsd_M], pnorm(0, ccm_out$M_cause_B$rho[maxsd_M], ccm_out$M_cause_B$sdevrho[maxsd_M]))
 
   T_cause<-(T_curve[1]<0)&&(T_curve[2]<0.05)&&(T_rho[1]>0)&&(T_rho[2]<0.05)
   M_cause<-(M_curve[1]<0)&&(M_curve[2]<0.05)&&(M_rho[1]>0)&&(M_rho[2]<0.05)

@@ -12,26 +12,28 @@ system.time({
   #Initialize and make data
   program_init_bootstrap_short()
   
-  ode_result<-NULL
-  
-  while(length(ode_result)==0) { #catch strange deSolve error
-    try({
-      ode_result<-make_comp_data_boot_Cfxn(seednum=FALSE, xstr=0.9,  times=seq(1, 100, by = 1), number_of_chains=5)
-    })
+  ode_result<-make_comp_data_boot_Cfxn(seednum=FALSE, xstr=0.5,  times=seq(101, 1001, by = 1), number_of_chains=1, pval_lose=0.5)
     
-    library.dynam.unload("deSolve", libpath=paste(.libPaths()[1], "//deSolve", sep=""))
-    library.dynam("deSolve", package="deSolve", lib.loc=.libPaths()[1])    
-  }
+  #fix xlist and ylist
+  times<-c(0, ode_result$pars$times)
+  cutlist<-cut(1:max(times), times)
+  ode_result$pars$xlist<-tapply(ode_result$pars$xlist, cutlist, mean)
+  ode_result$pars$ylist<-tapply(ode_result$pars$ylist, cutlist, mean)
   
+  #Re-scale all elements to zero mean and unit var.
+  
+  
+  
+  #ode_result<-make_comp_data_boot_Cfxn(seednum=FALSE, xstr=1,  times=seq(101, 1001, by = 1), number_of_chains=1, pval_lose=0)
   
   plot_output_boot(ode_result)
   
   #Compare species to environment
-  eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=1, maxE=5)
+  eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=1, maxE=3)
   
-  ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=5, iterations=100, twoway=FALSE)
-  ssr_out<-ssr_data(ccm_out, predstepmax=10, tau=1)
-  plot_ccm(ccm_out,  ylimits=c(-0.2, 1), twoway=FALSE)
+  ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=2, iterations=100, twoway=FALSE)
+  ssr_out<-ssr_data(ccm_out, predstepmax=5, tau=1)
+  plot_ccm(ccm_out,  ylimits=c(-0.1, 0.4), twoway=FALSE)
   
   test_out<-testccm(ccm_out)
   test_out
