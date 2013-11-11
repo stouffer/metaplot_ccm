@@ -128,7 +128,7 @@ SSR_pred_boot<-function(A, B=A, E, tau=1, predstep=1, matchSugi=1) {
   acceptablelib<-which(acceptablelib>0)-1 #Convert into positions in C array
   lengthacceptablelib<-length(acceptablelib)
   
-  if(tau*(E+1+predstep)>lengthacceptablelib) {
+  if(tau*(E+1)+predstep>=lengthacceptablelib) {
     print(paste("Error - too few records to test E =", E, "tau =", tau, "and prestep =", predstep))
     return(out=list(A=A, Aest=NA, B=B, E=E, tau=tau, pBlength=length(B), pAlength=length(A), predstep=predstep,
                     prepvec=repvec, pmatchSugi=matchSugi, acceptablelib=acceptablelib, plengthacceptablelib=lengthacceptablelib, rho=NA))

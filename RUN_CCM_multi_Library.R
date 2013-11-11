@@ -29,11 +29,11 @@ system.time({
   plot_output_boot(ode_result)
   
   #Compare species to environment
-  eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=1, maxE=3)
+  eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=1, maxE=5)
   
-  ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=2, iterations=100, twoway=FALSE)
+  ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=5, iterations=100, twoway=FALSE)
   ssr_out<-ssr_data(ccm_out, predstepmax=5, tau=1)
-  plot_ccm(ccm_out,  ylimits=c(-0.1, 0.4), twoway=FALSE)
+  plot_ccm(ccm_out,  ylimits=c(0, 0.3), twoway=FALSE)
   
   test_out<-testccm(ccm_out)
   test_out
