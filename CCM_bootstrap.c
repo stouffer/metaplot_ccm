@@ -1,12 +1,13 @@
 #include <R.h>
 #include <Rmath.h>
-void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]);
+#include <stdio.h>
+int getorder(int *neighbors, double distances[], int E, int from, int to, int i, int LibUse[]);
 void getrho(double A[], double Aest[], double rho[], int from, int to, int l, double *varrho, int failediter, int *acceptablelib, int lengthacceptablelib);
 void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int *ptau, int *plengtht, int *pLibLength, int *DesiredL, int *plengthDesL, int *piterations, double *varrho, int *acceptablelib, int *plengthacceptablelib) {
     int i, j, k, l, from, to, slide, count, lindex;
     double distsv, sumu, sumaest, sumw;
     int E = *pE;
-	int nneigh=E+1;
+	  int nneigh=E+1;
     int tau = *ptau;
     int lengtht= *plengtht;
     int lengthDesL= *plengthDesL;
@@ -18,8 +19,13 @@ void CCM_bootstrap(double *A, double *Aest, double *B, double *rho, int *pE, int
     int lengthacceptablelib = *plengthacceptablelib;
     int integerpos;
     int failediter=0;
+    
+    if(tau*(E+1)>=lengthacceptablelib) {
+      fprintf(stderr, "Error - cannot use more lags than there are data points \n");
+      exit(1);
+    }
+    
     GetRNGstate(); // Load seed for random number generation, R base
-
     
     /* Code to implement Sugihara&al 2012 CCM algorithm to determing causality */
     /* Checks to see that *A causes *B */
@@ -61,8 +67,7 @@ for(slide=from; slide<iterations; slide++) { // Run desired number of iterations
                             distances[LibUse[j]]=sqrt(distances[LibUse[j]]);
                         }
                         //distances is now a vector of distances between focul point, and all j other points in simulated library under consideration, and is indexed by LibUse[]
-                        
-                        getorder(neighbors, distances, E, from, to, i, LibUse); //find position of (E+1) closest points to B[i] on the shadow manifold. Neighbors correspond to positions in LibUse.                        
+                        nneigh = getorder(neighbors, distances, E, from, to, i, LibUse); //find position of (E+1) closest points to B[i] on the shadow manifold. Neighbors correspond to positions in LibUse.
                         distsv=distances[neighbors[0]]; //shortest distance
                         
                         sumaest=0.; /* find w, and weighted Aest variables */
@@ -110,15 +115,17 @@ for(slide=from; slide<iterations; slide++) { // Run desired number of iterations
     PutRNGstate(); // Free up state of R random number generator
 }
 
-void getorder(int neighbors[], double distances[], int E, int from, int to, int i, int LibUse[]) {
+int getorder(int *neighbors, double distances[], int E, int from, int to, int i, int LibUse[]) {
+
     //find position of (Ego+1) closest points to B[i] on the shadow manifold
-    int trip, n, ii, j, k, nneigh;
-    nneigh=1;
+    int trip, n, ii, j, k;
+    int nneigh=1;
     n=0;
     if(LibUse[from]==i) { //if first element is a self-reference, increment
-        n=n+1;
+        n=1;
     }
-	neighbors[0]=LibUse[from+n];
+	  neighbors[0]=LibUse[from+n];
+	
     for(ii=(from+n); ii<=to; ii++) { // scroll across elements in L
         trip=0;
         for(j=0; j<nneigh; j++) { // move existing neighbors up in vector if a closer neighbor is found
@@ -129,7 +136,8 @@ void getorder(int neighbors[], double distances[], int E, int from, int to, int 
                     }
                 }
                 neighbors[j]=LibUse[ii]; // Replace leading element with new closest neighbor
-                if(nneigh<(E+1)) {
+
+                if((nneigh<(E+1))&&(trip!=0)) {
                     nneigh=nneigh+1;
                 }
                 trip=1;
@@ -143,6 +151,7 @@ void getorder(int neighbors[], double distances[], int E, int from, int to, int 
             }
         }
     }
+    return nneigh;
 }
 
 void getrho(double A[], double Aest[], double rho[], int from, int to, int l, double *varrho, int failediter, int *acceptablelib, int lengthacceptablelib) {
