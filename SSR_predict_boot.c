@@ -15,12 +15,13 @@ void SSR_predict_boot(double *A, double *Aest, double *B, int *pE, int *ptau, in
     int predstep= *ppredstep;
     int matchSugi=*pmatchSugi;
     double u[E+1], w[E+1], distances[Blength];
+    double maxdist=0;
     int lengthacceptablelib=*plengthacceptablelib;
     /* Code to implement Sugihara&al SSR algorithm */
     /* Uses information in B to predict next predstep steps of A */
     /* Note that *A and *B need not be the same size - but if they are the same vector, then repvec must = "1" */
     
-    if(E+1>lengthacceptablelib) {
+    if(tau*(E+1)+predstep>=lengthacceptablelib) {
       fprintf(stderr, "Error - cannot use more lags than there are data points \n");
       exit(1);
     }
@@ -40,8 +41,11 @@ void SSR_predict_boot(double *A, double *Aest, double *B, int *pE, int *ptau, in
                         distances[j]=distances[j]+pow((A[i-tau*k]-B[j-tau*k]),2); /*calculate distances between points on A and B for all E lagged dimensions*/
                     }
                     distances[j]=sqrt(distances[j]);
+                    if(maxdist<distances[j]) {
+                      maxdist=999999999*distances[j];
+                    }
                 } else {
-                    distances[j]=999;
+                    distances[j]=maxdist;
                 }
                 } else{
                     if((j>i+predstep)|(j<=(i-E))) {
@@ -49,8 +53,11 @@ void SSR_predict_boot(double *A, double *Aest, double *B, int *pE, int *ptau, in
                             distances[j]=distances[j]+pow((A[i-tau*k]-B[j-tau*k]),2); /*calculate distances between points on A and B for all E lagged dimensions*/
                         }
                         distances[j]=sqrt(distances[j]);
+                        if(maxdist<distances[j]) {
+                          maxdist=999999999*distances[j];
+                        }
                     } else {
-                        distances[j]=999;
+                        distances[j]=maxdist;
                     }
                 }
             }
