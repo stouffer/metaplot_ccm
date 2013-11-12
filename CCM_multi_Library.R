@@ -256,8 +256,8 @@ make_comp_data_boot_Cfxn<-function(a = 1,
                                    Q = 2,
                                    r = 1,
                                    S = 100,
-                                   x_mean_sd = c(25, 1),
-                                   y_mean_sd = c(25, 1),
+                                   x_mean_sd = c(0, 1),
+                                   y_mean_sd = c(0, 1),
                                    xstr=0.5,
                                    B=c(rep(1, 12)),
                                    R=100,
@@ -286,22 +286,25 @@ make_comp_data_boot_Cfxn<-function(a = 1,
   
   pars=c(OUrates[1], OUrates[2], Wrates[1],Wrates[2],x_mean_sd[1],  y_mean_sd[1],xstr,  Q,  r,  S,  a,  m,  K,  w,  xopt, yopt)
   
-  xlist<- numeric(max(times)-min(times)+1)
+  xlist<- numeric(max(times))
   ylist<- numeric(max(times))
   xmid<-x_mean_sd[1]
   ymid<-y_mean_sd[1]
   
-  xlist[1]<-runif(1, min=max(x_mean_sd[1]-2*x_mean_sd[2],0), max=x_mean_sd[1]+2*x_mean_sd[2])
-  ylist[1]<-runif(1, min=max(y_mean_sd[1]-2*y_mean_sd[2],0), max=y_mean_sd[1]+2*y_mean_sd[2])
+  xlist[1]<-runif(1, min=x_mean_sd[1]-2*x_mean_sd[2], max=x_mean_sd[1]+2*x_mean_sd[2])
+  ylist[1]<-runif(1, min=y_mean_sd[1]-2*y_mean_sd[2], max=y_mean_sd[1]+2*y_mean_sd[2])
   Wxlist<-rnorm(max(times), 0, Wrates[1]) #White noise for x
   Wylist<-rnorm(max(times), 0, Wrates[2]) #White noise for y
   for(i in 2:max(times)) {
-    #xlist[i]<-xlist[i-1]+(xmid-xlist[i-1])*OUrates[1]+Wxlist[i-1]
-    #ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
-    
-    xlist[i]<-xlist[i-1]*(1+OUrates[1]*(1-xlist[i-1]/xmid))+Wxlist[i-1]
-    ylist[i]<-ylist[i-1]*exp(OUrates[2]*(1-ylist[i-1]/ymid))+Wylist[i-1]
+    xlist[i]<-xlist[i-1]+(xmid-xlist[i-1])*OUrates[1]+Wxlist[i-1]
+    ylist[i]<-ylist[i-1]+(ymid-ylist[i-1])*OUrates[2]+Wylist[i-1]
   } #Check out speed of response (Smapping - which work, which don't? Fully stochastic vs. some signal)
+  
+  xlist<-xlist+sin(1:max(times)/100*pi*2)
+  ylist<-ylist+cos(1:max(times)/100*pi*2) 
+  
+  xlist<-scale(xlist)
+  ylist<-scale(ylist)
   
   forcings <- list(x=cbind(times,xlist[(1:max(times))%in%times]), y=cbind(times,ylist[(1:max(times))%in%times]))
   #matplot(times, cbind(xlist, ylist), type="s", ylab="Climvar")
@@ -375,13 +378,13 @@ plot_output_boot<-function(ode_result) {
   
   #Plot niche space
   plot(range(pars$xopt), c(0,1), xlab="x", ylab="f", type="n", main="x niche space")
-  dlist<-seq(20,30,by=0.1)
+  dlist<-seq(min(pars$xopt)-1, max(pars$xopt)+1, by=0.001)
   for(i in pars$xopt) {
     lines(dlist, pars$r*exp(-0.5*((abs(i-dlist))/pars$w)^2))
   }
   
   plot(range(pars$yopt), c(0,1), xlab="y", ylab="f", type="n", main="y niche space")
-  dlist<-seq(20,30,by=0.1)
+  dlist<-seq(min(pars$yopt)-1, max(pars$yopt)+1, by=0.001)
   for(i in pars$yopt) {
     lines(dlist, pars$r*exp(-0.5*((abs(i-dlist))/pars$w)^2))
   }
@@ -724,6 +727,107 @@ testccm<-function(ccm_out) {
 }
 
 
-#Try this out? http://www.r-bloggers.com/a-better-nls/
 
+###Boot diff version
+testccm<-function(ccm_out, iter=1000) {
+  lng_T<-length(ccm_out$T_cause_B$rho)
+  lng_M<-length(ccm_out$M_cause_B$rho)
+  
+  
+  T_dat<-matrix(nrow=iter, ncol=2)
+  M_dat<-matrix(nrow=iter, ncol=2)
+  Ttime<-ccm_out$T_cause_B$Lobs
+  Mtime<-ccm_out$M_cause_B$Lobs
+    
+  for(i in 1:iter) {
+    subsT<-rnorm(n=lng_T, mean=ccm_out$T_cause_B$rho, sd=ccm_out$T_cause_B$sdevrho)
+    subsM<-rnorm(n=lng_M, mean=ccm_out$M_cause_B$rho, sd=ccm_out$M_cause_B$sdevrho)
+  
+    testT<-rnorm(n=lng_T, mean=0, sd=ccm_out$T_cause_B$sdevrho)
+    testM<-rnorm(n=lng_M, mean=0, sd=ccm_out$M_cause_B$sdevrho)
+  #Test for increasing function, by estimating magnitudes of second derivative
+    T_dat[i,1]<-sum(diff(subsT)/diff(ccm_out$T_cause_B$Lobs))#/(lng_T-1)
+    M_dat[i,1]<-sum(diff(subsM)/diff(ccm_out$M_cause_B$Lobs))#/(lng_M-1)
+  
+    T_dat[i,2]<-sum(diff(testT)/diff(ccm_out$T_cause_B$Lobs))#/(lng_T-1)
+    M_dat[i,2]<-sum(diff(testM)/diff(ccm_out$M_cause_B$Lobs))#/(lng_M-1)
+  }
+  
+  
+  summary(lm(testT~Ttime+I(Ttime^2)))
+  
+  hist(T_dat[,1])
+  
+  t.test(T_dat[,1], T_dat[,2], paired=TRUE)
+  t.test(M_dat[,1], M_dat[,2], paired=TRUE)
+  
+  T_curve<-quantile(T_dat, 0.025)
+  M_curve<-quantile(M_dat, 0.025)
+  
+  maxsd_T<-max(which(is.finite(ccm_out$T_cause_B$sdevrho)))
+  maxsd_M<-max(which(is.finite(ccm_out$M_cause_B$sdevrho)))
+  
+  #Test whether final rho is significantly different from zero
+  T_rho<-c(ccm_out$T_cause_B$rho[maxsd_T], pnorm(0, ccm_out$T_cause_B$rho[maxsd_T], ccm_out$T_cause_B$sdevrho[maxsd_T]))
+  M_rho<-c(ccm_out$M_cause_B$rho[maxsd_M], pnorm(0, ccm_out$M_cause_B$rho[maxsd_M], ccm_out$M_cause_B$sdevrho[maxsd_M]))
+  
+  T_cause<-(T_curve[1]<0)&&(T_curve[2]<0.05)&&(T_rho[1]>0)&&(T_rho[2]<0.05)
+  M_cause<-(M_curve[1]<0)&&(M_curve[2]<0.05)&&(M_rho[1]>0)&&(M_rho[2]<0.05)
+  
+  T_test<-c(T_curve, T_rho, T_cause)
+  names(T_test)<-c("diff", "pdiff", "rho", "prho", "cause")
+  M_test<-c(M_curve, M_rho, M_cause)
+  names(M_test)<-c("diff", "pdiff", "rho", "prho", "cause")
+  
+  return(list(T_test=T_test, M_test=M_test))
+}
+
+
+#Try this out? http://www.r-bloggers.com/a-better-nls/
+#exp test
+testccm_exp<-function(ccm_out, iter=1000) {
+  lng_T<-length(ccm_out$T_cause_B$rho)
+  lng_M<-length(ccm_out$M_cause_B$rho)
+  
+  
+  #Test for increasing function, by estimating magnitudes of second derivative
+  T_clist<-numeric(iter); M_clist<-numeric(iter)
+  
+  for(i in 1:iter) {
+    x<-ccm_out$T_cause_B$Lobs
+    y<-rnorm(length(ccm_out$T_cause_B$rho), ccm_out$T_cause_B$rho, ccm_out$T_cause_B$sdevrho)
+    mod<-try(nls(y~SSasymp(x, a, b, c)), silent=T)
+    if(length(mod)!=1) {
+      T_clist[i]<-summary(mod)$coefficients[3,1]
+    }
+      
+    x<-ccm_out$M_cause_B$Lobs
+    y<-rnorm(length(ccm_out$M_cause_B$rho), ccm_out$M_cause_B$rho, ccm_out$M_cause_B$sdevrho)
+    mod<-try(nls(y~SSasymp(x, a, b, c)), silent=T)
+    if(length(mod)!=1) {
+      M_clist[i]<-summary(mod)$coefficients[3,1]
+    }
+    print(i)
+  }
+  
+  T_curve<-quantile(T_clist[T_clist!=0], 0.975)
+  M_curve<-quantile(M_clist[M_clist!=0], 0.975)
+  
+  maxsd_T<-max(which(is.finite(ccm_out$T_cause_B$sdevrho)))
+  maxsd_M<-max(which(is.finite(ccm_out$M_cause_B$sdevrho)))
+  
+  #Test whether final rho is significantly different from zero
+  T_rho<-c(ccm_out$T_cause_B$rho[maxsd_T], pnorm(0, ccm_out$T_cause_B$rho[maxsd_T], ccm_out$T_cause_B$sdevrho[maxsd_T]))
+  M_rho<-c(ccm_out$M_cause_B$rho[maxsd_M], pnorm(0, ccm_out$M_cause_B$rho[maxsd_M], ccm_out$M_cause_B$sdevrho[maxsd_M]))
+  
+  T_cause<-(T_curve<0)&&(T_rho[1]>0)&&(T_rho[2]<0.05)
+  M_cause<-(M_curve<0)&&(M_rho[1]>0)&&(M_rho[2]<0.05)
+  
+  T_test<-c(T_curve, T_rho, T_cause)
+  names(T_test)<-c("c_975", "rho", "prho", "cause")
+  M_test<-c(M_curve, M_rho, M_cause)
+  names(M_test)<-c("c_975", "rho", "prho", "cause")
+  
+  return(list(T_test=T_test, M_test=M_test))
+}
 

@@ -12,28 +12,27 @@ system.time({
   #Initialize and make data
   program_init_bootstrap_short()
   
-  ode_result<-make_comp_data_boot_Cfxn(seednum=FALSE, xstr=0.5,  times=seq(101, 1001, by = 1), number_of_chains=1, pval_lose=0.5)
-    
+  #seednum=190; xstr=0; times=seq(101, 1001, by = 1); number_of_chains=1; pval_lose=0.5; x_mean_sd = c(0, 1); y_mean_sd = c(0, 1); Wrates=c(2, 2)
+  ode_result<-make_comp_data_boot_Cfxn(seednum=FALSE, xstr=0,  times=seq(101, 1001, by = 1), number_of_chains=1, pval_lose=0, x_mean_sd = c(0, 1),y_mean_sd = c(0, 1), Wrates=c(1, 1), OUrates=c(0.1, 0.1))
+  
   #fix xlist and ylist
   times<-c(0, ode_result$pars$times)
   cutlist<-cut(1:max(times), times)
   ode_result$pars$xlist<-tapply(ode_result$pars$xlist, cutlist, mean)
   ode_result$pars$ylist<-tapply(ode_result$pars$ylist, cutlist, mean)
-  
+
+  plot_output_boot(ode_result)
   #Re-scale all elements to zero mean and unit var.
   
   
   
   #ode_result<-make_comp_data_boot_Cfxn(seednum=FALSE, xstr=1,  times=seq(101, 1001, by = 1), number_of_chains=1, pval_lose=0)
-  
-  plot_output_boot(ode_result)
-  
   #Compare species to environment
-  eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=1, maxE=5)
+  eplot_out_boot<-makeEplot_environment_boot(ode_result, "all", tau=1, predstep=1, maxE=8)
   
-  ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=5, iterations=100, twoway=FALSE)
+  ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=7, iterations=100, twoway=FALSE)
   ssr_out<-ssr_data(ccm_out, predstepmax=5, tau=1)
-  plot_ccm(ccm_out,  ylimits=c(0, 0.3), twoway=FALSE)
+  plot_ccm(ccm_out,  ylimits=c(-0.05, 0.6), twoway=FALSE)
   
   test_out<-testccm(ccm_out)
   test_out
