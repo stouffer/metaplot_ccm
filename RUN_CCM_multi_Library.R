@@ -32,9 +32,9 @@ system.time({
   
   ccm_out<-doCCM_environment(ode_result=ode_result, target_sp="all", predstep=1, tau=1, maxE=7, iterations=100, twoway=FALSE)
   ssr_out<-ssr_data(ccm_out, predstepmax=5, tau=1)
-  plot_ccm(ccm_out,  ylimits=c(-0.05, 0.6), twoway=FALSE)
+  plot_ccm(ccm_out,  ylimits=c(-0.1, 0.4), twoway=FALSE)
   
-  test_out<-testccm(ccm_out)
+  test_out<-testccm_boot(ccm_out, iter=1000)
   test_out
 })
 

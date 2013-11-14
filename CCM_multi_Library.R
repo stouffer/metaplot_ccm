@@ -366,10 +366,10 @@ plot_output_boot<-function(ode_result) {
   out<-ode_result$out
   pars<-ode_result$pars
   
-  matplot(out[ , 1], out[ , -c(1,2)], type = "l", xlab = "time", ylab = "B",
+  matplot(out[ , 1], out[,3:14], type = "l", xlab = "time", ylab = "B",
           main = "Bmod", lwd = 2)
   plot(out[,1], out[,2], type="l", xlab="time", ylab="R")
-  plot(out[ , 1], rowSums(out[ , -c(1,2)]), type = "l", xlab = "time", ylab = "B",
+  plot(out[ , 1], rowSums(out[,3:14]), type = "l", xlab = "time", ylab = "B",
        main = "Bmod", lwd = 2)
   
   timelist<-1:length(pars$xlist)
@@ -399,9 +399,9 @@ makeEplot_environment_boot<-function(ode_result, target_sp, predstep=10, tau=1, 
   pars<-ode_result[["pars"]]
   
   if(target_sp=="all") {
-    Biomass_total<-rowSums(out[ , -c(1,2)])
+    Biomass_total<-rowSums(out[,3:14])
   } else {
-    Biomass_total<-out[ , target_sp+2]
+    Biomass_total<-out[,3:14]
   }
   temperature<-pars$xlist
   moisture<-pars$ylist
@@ -476,7 +476,7 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
   #########################
   
   if(target_sp=="all") {
-    Biomass_total<-rowSums(out[ , -c(1,2)])
+    Biomass_total<-rowSums(out[,3:14])
   } else {
     Biomass_total<-out[ , target_sp+2]
   }
@@ -514,11 +514,11 @@ doCCM_environment<-function(ode_result, target_sp, predstep=10, tau=1, maxE=20, 
   
   
   maxE_use<-max(E_temp, E_moist, E_biom)
-  DesiredL<-sort(unique(c(floor(seq((maxE_use)*tau, length(temperature)/4, length=10)),
-                          floor(seq(length(temperature)/4, length(temperature)-tau, length=11)))))
+  #DesiredL<-sort(unique(c(floor(seq((maxE_use)*tau, length(temperature)/4, length=10)),
+  #                        floor(seq(length(temperature)/4, length(temperature)-tau, length=11)))))
   
-  T_cause_B<-CCM_boot(A=temperature, B=Biomass_total, E=E_temp, DesiredL=DesiredL, iterations=iterations)
-  M_cause_B<-CCM_boot(A=moisture, B=Biomass_total, E=E_moist, DesiredL=DesiredL, iterations=iterations)
+  T_cause_B<-CCM_boot(A=temperature, B=Biomass_total, E=E_temp, iterations=iterations)#, DesiredL=DesiredL)
+  M_cause_B<-CCM_boot(A=moisture, B=Biomass_total, E=E_moist, iterations=iterations)#, DesiredL=DesiredL)
   
   
   if(twoway) {
@@ -729,55 +729,60 @@ testccm<-function(ccm_out) {
 
 
 ###Boot diff version
-testccm<-function(ccm_out, iter=1000) {
+testccm_boot<-function(ccm_out, iter=1000) {
   lng_T<-length(ccm_out$T_cause_B$rho)
   lng_M<-length(ccm_out$M_cause_B$rho)
   
   
-  T_dat<-matrix(nrow=iter, ncol=2)
-  M_dat<-matrix(nrow=iter, ncol=2)
+  T_dat<-matrix(nrow=iter, ncol=1)
+  M_dat<-matrix(nrow=iter, ncol=1)
   Ttime<-ccm_out$T_cause_B$Lobs
   Mtime<-ccm_out$M_cause_B$Lobs
+  Trho<-ccm_out$T_cause_B$rho
+  Tsrho<-ccm_out$T_cause_B$sdevrho
+  Mrho<-ccm_out$M_cause_B$rho
+  Msrho<-ccm_out$M_cause_B$sdevrho
     
   for(i in 1:iter) {
-    subsT<-rnorm(n=lng_T, mean=ccm_out$T_cause_B$rho, sd=ccm_out$T_cause_B$sdevrho)
-    subsM<-rnorm(n=lng_M, mean=ccm_out$M_cause_B$rho, sd=ccm_out$M_cause_B$sdevrho)
+    tmT<-sample((1:length(Ttime))[!is.na(Tsrho)], iter, rep=T)
+    tmM<-sample((1:length(Mtime))[!is.na(Msrho)], iter, rep=T)
+    
+    subsT<-rnorm(n=iter, mean=Trho[tmT], sd=Tsrho[tmT])
+    subsM<-rnorm(n=iter, mean=Mrho[tmM], sd=Msrho[tmM])
   
-    testT<-rnorm(n=lng_T, mean=0, sd=ccm_out$T_cause_B$sdevrho)
-    testM<-rnorm(n=lng_M, mean=0, sd=ccm_out$M_cause_B$sdevrho)
-  #Test for increasing function, by estimating magnitudes of second derivative
-    T_dat[i,1]<-sum(diff(subsT)/diff(ccm_out$T_cause_B$Lobs))#/(lng_T-1)
-    M_dat[i,1]<-sum(diff(subsM)/diff(ccm_out$M_cause_B$Lobs))#/(lng_M-1)
-  
-    T_dat[i,2]<-sum(diff(testT)/diff(ccm_out$T_cause_B$Lobs))#/(lng_T-1)
-    M_dat[i,2]<-sum(diff(testM)/diff(ccm_out$M_cause_B$Lobs))#/(lng_M-1)
+    tmT2<-sample((1:length(ccm_out$T_cause_B$Lobs))[!is.na(ccm_out$T_cause_B$sdevrho)], iter, rep=T)
+    tmM2<-sample((1:length(ccm_out$M_cause_B$Lobs))[!is.na(ccm_out$M_cause_B$sdevrho)], iter, rep=T)
+    
+    subsT<-subsT-rnorm(n=iter, mean=Trho[tmT2], sd=ccm_out$T_cause_B$sdevrho[tmT2])
+    subsM<-subsM-rnorm(n=iter, mean=Mrho[tmM2], sd=ccm_out$M_cause_B$sdevrho[tmM2])
+    
+    tmT<-tmT-tmT2
+    tmM<-tmM-tmM2
+    
+    T_dat[i,1]<-summary(lm(subsT~tmT))$coefficients[2,1]
+    M_dat[i,1]<-summary(lm(subsM~tmM))$coefficients[2,1] 
   }
   
+  #hist(T_dat[,1])
+  #hist(M_dat[,1])
   
-  summary(lm(testT~Ttime+I(Ttime^2)))
-  
-  hist(T_dat[,1])
-  
-  t.test(T_dat[,1], T_dat[,2], paired=TRUE)
-  t.test(M_dat[,1], M_dat[,2], paired=TRUE)
-  
-  T_curve<-quantile(T_dat, 0.025)
-  M_curve<-quantile(M_dat, 0.025)
+  T_curve<-quantile(T_dat, c(0.025, 0.1586553, 0.5, 0.8413447, 0.975), na.rm=TRUE)
+  M_curve<-quantile(M_dat, c(0.025, 0.1586553, 0.5, 0.8413447, 0.975), na.rm=TRUE)
   
   maxsd_T<-max(which(is.finite(ccm_out$T_cause_B$sdevrho)))
   maxsd_M<-max(which(is.finite(ccm_out$M_cause_B$sdevrho)))
   
   #Test whether final rho is significantly different from zero
-  T_rho<-c(ccm_out$T_cause_B$rho[maxsd_T], pnorm(0, ccm_out$T_cause_B$rho[maxsd_T], ccm_out$T_cause_B$sdevrho[maxsd_T]))
-  M_rho<-c(ccm_out$M_cause_B$rho[maxsd_M], pnorm(0, ccm_out$M_cause_B$rho[maxsd_M], ccm_out$M_cause_B$sdevrho[maxsd_M]))
+  T_rho<-c(ccm_out$T_cause_B$rho[maxsd_T], ccm_out$T_cause_B$sdevrho[maxsd_T], pnorm(0, ccm_out$T_cause_B$rho[maxsd_T], ccm_out$T_cause_B$sdevrho[maxsd_T]))
+  M_rho<-c(ccm_out$M_cause_B$rho[maxsd_M], ccm_out$M_cause_B$sdevrho[maxsd_M], pnorm(0, ccm_out$M_cause_B$rho[maxsd_M], ccm_out$M_cause_B$sdevrho[maxsd_M]))
   
-  T_cause<-(T_curve[1]<0)&&(T_curve[2]<0.05)&&(T_rho[1]>0)&&(T_rho[2]<0.05)
-  M_cause<-(M_curve[1]<0)&&(M_curve[2]<0.05)&&(M_rho[1]>0)&&(M_rho[2]<0.05)
+  T_cause<-(T_curve[1]>0)&&(T_rho[1]>0)&&(T_rho[3]<0.05)
+  M_cause<-(M_curve[1]>0)&&(M_rho[1]>0)&&(M_rho[3]<0.05)
   
   T_test<-c(T_curve, T_rho, T_cause)
-  names(T_test)<-c("diff", "pdiff", "rho", "prho", "cause")
+  names(T_test)<-c("sl_025", "sl_160", "sl_500", "sl_840", "sl_975", "rho", "vrho", "prho", "cause")
   M_test<-c(M_curve, M_rho, M_cause)
-  names(M_test)<-c("diff", "pdiff", "rho", "prho", "cause")
+  names(M_test)<-c("sl_025", "sl_160", "sl_500", "sl_840", "sl_975", "rho", "vrho", "prho", "cause")
   
   return(list(T_test=T_test, M_test=M_test))
 }
@@ -791,27 +796,38 @@ testccm_exp<-function(ccm_out, iter=1000) {
   
   
   #Test for increasing function, by estimating magnitudes of second derivative
-  T_clist<-numeric(iter); M_clist<-numeric(iter)
+  T_clist<-matrix(nrow=iter, ncol=2); M_clist<-matrix(nrow=iter, ncol=2)
+  c("a", "k")->colnames(T_clist)->colnames(M_clist)
   
   for(i in 1:iter) {
     x<-ccm_out$T_cause_B$Lobs
     y<-rnorm(length(ccm_out$T_cause_B$rho), ccm_out$T_cause_B$rho, ccm_out$T_cause_B$sdevrho)
-    mod<-try(nls(y~SSasymp(x, a, b, c)), silent=T)
+    y<-ccm_out$T_cause_B$rho
+    kest<-(log(max(y)-y)/x); kest<-mean(kest[is.finite(kest)])
+    mod<-try(nls(y~SSasymp(x, Asym, lrc)),
+             silent=T)
     if(length(mod)!=1) {
-      T_clist[i]<-summary(mod)$coefficients[3,1]
+      T_clist[i,]<-summary(mod)$coefficients[c(1:2),1]
     }
       
     x<-ccm_out$M_cause_B$Lobs
     y<-rnorm(length(ccm_out$M_cause_B$rho), ccm_out$M_cause_B$rho, ccm_out$M_cause_B$sdevrho)
-    mod<-try(nls(y~SSasymp(x, a, b, c)), silent=T)
+    y<-ccm_out$M_cause_B$rho
+    kest<-(log(max(y)-y)/x); kest<-mean(kest[is.finite(kest)])
+    mod<-try(nls(y~a-exp(k*x),
+                 start=c(a=max(y), k=kest)),
+             silent=T)
     if(length(mod)!=1) {
-      M_clist[i]<-summary(mod)$coefficients[3,1]
+      M_clist[i,]<-summary(mod)$coefficients[c(1:2),1]
     }
+    
     print(i)
   }
   
-  T_curve<-quantile(T_clist[T_clist!=0], 0.975)
-  M_curve<-quantile(M_clist[M_clist!=0], 0.975)
+  T_curve<-c(quantile(T_clist[,"a"], 0.025, na.rm=T), quantile(T_clist[,"k"], 0.975, na.rm=T))
+  lines(0:900, mean(M_clist[1000,1], na.rm=T)-exp(mean(M_clist[1000,2], na.rm=T)*c(0:900)), lwd=2)
+  
+  M_curve<-quantile(M_clist[M_clist!=0], 0.975, na.rm=T)
   
   maxsd_T<-max(which(is.finite(ccm_out$T_cause_B$sdevrho)))
   maxsd_M<-max(which(is.finite(ccm_out$M_cause_B$sdevrho)))
@@ -830,4 +846,3 @@ testccm_exp<-function(ccm_out, iter=1000) {
   
   return(list(T_test=T_test, M_test=M_test))
 }
-
