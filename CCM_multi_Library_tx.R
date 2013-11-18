@@ -21,7 +21,7 @@ program_init_bootstrap<-function() {
   system(paste("R CMD SHLIB ",file2,".c",sep=""))
   dyn.load(paste(file2,".so",sep=""))
   
-  file3="bmod"
+  file3="bmod_single"
   if(is.loaded(file3)) {dyn.unload(paste(file3,".so",sep=""))}
   system(paste("R CMD SHLIB ",file3,".c",sep=""))
   dyn.load(paste(file3,".so",sep=""))
@@ -44,7 +44,7 @@ program_init_bootstrap_short<-function() {
     dyn.load(paste(file2,".so",sep=""))
   }
   
-  file3="bmod"
+  file3="bmod_single"
   if(!is.loaded(file3)) {
     dyn.load(paste(file3,".so",sep=""))
   }
@@ -161,8 +161,8 @@ make_comp_data_boot<-function(a = 1,
   #########################
   # run diffeq function
   #########################
-  xopt<-seq(x_mean_sd[1]-x_mean_sd[2], x_mean_sd[1]+x_mean_sd[2], length=nspec)
-  yopt<-seq(y_mean_sd[1]+y_mean_sd[2], y_mean_sd[1]-y_mean_sd[2], length=nspec)
+  xopt<-seq(0, 1, length=nspec) #increase this?
+  yopt<-seq(y_mean_sd[1]-y_mean_sd[2], y_mean_sd[1]+y_mean_sd[2], length=nspec)[c(6:1, 12:7)]
   
   pars=c(OUrates[1], OUrates[2], Wrates[1],Wrates[2],x_mean_sd[1],  y_mean_sd[1],xstr,  Q,  r,  S,  a,  m,  K,  w,  xopt, yopt)
   
@@ -186,7 +186,7 @@ make_comp_data_boot<-function(a = 1,
   xlist<-scale(xlist)
   ylist<-scale(ylist)
   
-  forcings <- list(x=cbind(times,xlist[(1:max(times))%in%times]), y=cbind(times,ylist[(1:max(times))%in%times]))
+  forcings <- list(x=cbind(times,xlist[(1:max(times))%in%times]))
   
   return(list(pars=pars, forcings=forcings, nspec=nspec, xopt=xopt, yopt=yopt, xlist=xlist, ylist=ylist))
 }
@@ -213,7 +213,6 @@ make_comp_sim<-function(compsimout, number_of_chains=10,
   pars[7]<-xstr
   forcings<-compsimout$forcings
   nspec<-compsimout$nspec
-  B<-rep(1, nspec)
   R<-100
   xopt<-compsimout$xopt
   yopt<-compsimout$yopt
@@ -230,7 +229,7 @@ make_comp_sim<-function(compsimout, number_of_chains=10,
     
     yini<-c(R, Biter)
     out_tmp   <- ode(y=yini, times=times, func="derivs",
-                     parms=parms, dllname="bmod", initforc="forcc",
+                     parms=parms, dllname="bmod_single", initforc="forcc",
                      forcings=forcings, initfun="parmsc", nout=14,
                      outnames=NULL, jacfun="jac", 
                      method="ode23")
